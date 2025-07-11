@@ -1405,10 +1405,13 @@ class QtConan(ConanFile):
                 _create_module("3DQuickScene2D", ["3DCore", "3DQuick", "3DRender", "Gui", "Qml"])
         if self.options.get_safe("qtimageformats"):
             _create_plugin("ICNSPlugin", "qicns", "imageformats", ["Gui"])
-            _create_plugin("QJp2Plugin", "qjp2", "imageformats", ["Gui"])
-            _create_plugin("QMacHeifPlugin", "qmacheif", "imageformats", ["Gui"])
-            _create_plugin("QMacJp2Plugin", "qmacjp2", "imageformats", ["Gui"])
-            _create_plugin("QMngPlugin", "qmng", "imageformats", ["Gui"])
+            # _create_plugin("QJp2Plugin", "qjp2", "imageformats", ["Gui"])
+            
+            if is_apple_os(self):
+                _create_plugin("QMacHeifPlugin", "qmacheif", "imageformats", ["Gui"])
+                _create_plugin("QMacJp2Plugin", "qmacjp2", "imageformats", ["Gui"])
+            
+            # _create_plugin("QMngPlugin", "qmng", "imageformats", ["Gui"])
             _create_plugin("QTgaPlugin", "qtga", "imageformats", ["Gui"])
             _create_plugin("QTiffPlugin", "qtiff", "imageformats", ["Gui"])
             _create_plugin("QWbmpPlugin", "qwbmp", "imageformats", ["Gui"])
