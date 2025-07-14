@@ -1369,6 +1369,34 @@ class QtConan(ConanFile):
                 _create_plugin("QGstreamerMediaPlugin", "gstreamermediaplugin", "multimedia", [
                     "gstreamer::gstreamer",
                     "gst-plugins-base::gst-plugins-base"])
+            
+            if self.settings.os == "Windows":
+                # _create_plugin("QWindowsIntegrationPlugin", "qwindows", "platforms", ["Core", "Gui"])
+                _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Core", "Multimedia" 
+                                                                                           # , "WMF::WMF"
+                                                                                           ])
+                self.cpp_info.components["qtQWindowsMediaPlugin"].system_libs += [
+                    "uuid",
+                    "d3d9",
+                    "dxva2",
+                    "evr",
+                    "gdi32",
+                    "ksuser",
+                    "mf",
+                    "mfcore",
+                    "mfplat",
+                    "mfreadwrite",
+                    "mfuuid",
+                    "ole32",
+                    "oleaut32",
+                    "propsys",
+                    "shlwapi",
+                    "strmiids",
+                    "amstrmid",
+                    "user32",
+                    "winmm",
+                    "wmcodecdspuuid"
+                ]
 
         if self.options.get_safe("qtpositioning"):
             _create_module("Positioning", [])
