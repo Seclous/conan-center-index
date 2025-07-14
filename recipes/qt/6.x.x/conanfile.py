@@ -1446,8 +1446,9 @@ class QtConan(ConanFile):
 
         if self.options.get_safe("qtpositioning"):
             _create_module("Positioning", [])
-            _create_plugin("QGeoPositionInfoSourceFactoryGeoclue2", "qtposition_geoclue2", "position", [])
-            _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", [])
+            if self.settings.os != "Windows":
+                _create_plugin("QGeoPositionInfoSourceFactoryGeoclue2", "qtposition_geoclue2", "position", [])
+                _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", [])
 
         if self.options.get_safe("qtsensors"):
             _create_module("Sensors", [])
