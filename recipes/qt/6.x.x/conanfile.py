@@ -1445,8 +1445,7 @@ class QtConan(ConanFile):
                     "gst-plugins-base::gst-plugins-base"])
 
             if self.settings.os == "Windows":
-                # _create_plugin("QWindowsIntegrationPlugin", "qwindows", "platforms", ["Core", "Gui"])
-                _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Core", "Multimedia"
+                _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Multimedia"
                                                                                            # , "WMF::WMF"
                                                                                            ])
                 self.cpp_info.components["qtQWindowsMediaPlugin"].system_libs += [
@@ -1475,12 +1474,19 @@ class QtConan(ConanFile):
         if self.options.get_safe("qtpositioning"):
             _create_module("Positioning", [])
             if self.settings.os == "Windows":
-                _create_plugin("QGeoPositionInfoSourceFactoryWinRT", "qtposition_winrt", "position", ["Core", "Positioning"])
+                # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/winrt/CMakeLists.txt
+                _create_plugin("QGeoPositionInfoSourceFactoryWinRT", "qtposition_winrt", "position", ["Positioning"])
                 self.cpp_info.components["qtQGeoPositionInfoSourceFactoryWinRT"].system_libs += [
                     "runtimeobject"
                 ]
             else:
                 _create_plugin("QGeoPositionInfoSourceFactoryGeoclue2", "qtposition_geoclue2", "position", [])
+
+            # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/nmea/CMakeLists.txt
+            _create_plugin("QGeoPositionInfoSourceFactoryNmea", "qtposition_nmea", "position", ["Positioning", "Network"])
+            if self.options.get_safe("qtserialport"):
+                self.cpp_info.components["qtEntryPointPrivate"].defines.append("QT_NMEA_PLUGIN_HAS_SERIALPORT")
+                self.cpp_info.components["qtEntryPointPrivate"].requires.append("qtSerialPort")
 
             _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", [])
 
