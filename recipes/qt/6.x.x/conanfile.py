@@ -1479,8 +1479,20 @@ class QtConan(ConanFile):
                 self.cpp_info.components["qtQGeoPositionInfoSourceFactoryWinRT"].system_libs += [
                     "runtimeobject"
                 ]
-            else:
-                _create_plugin("QGeoPositionInfoSourceFactoryGeoclue2", "qtposition_geoclue2", "position", [])
+            elif is_apple_os(self): # TODO: This is untested
+                # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/corelocation/CMakeLists.txt
+                _create_plugin("QGeoPositionInfoSourceFactoryCL", "qtposition_cl", "position", ["Positioning"])
+                self.cpp_info.components["qtQGeoPositionInfoSourceFactoryCL"].frameworks.append("CoreLocation")
+                self.cpp_info.components["qtQGeoPositionInfoSourceFactoryCL"].frameworks.append("Foundation")
+            elif self.settings.os == "Android": # TODO: This is untested
+                # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/android/src/CMakeLists.txt
+                _create_plugin("QGeoPositionInfoSourceFactoryAndroid", "qtposition_android", "position", ["Positioning"])
+            else: # Linux
+                # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/geoclue2/CMakeLists.txt
+                _create_plugin("QGeoPositionInfoSourceFactoryGeoclue2", "qtposition_geoclue2", "position", ["Positioning", "DBus"])
+                # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/gypsy/CMakeLists.txt
+                # TODO: This is untested
+                _create_plugin("QGeoPositionInfoSourceFactoryGypsy", "qtposition_gypsy", "position", ["Positioning", "Gypsy::Gypsy", "Gconf::Gconf"])
 
             # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/nmea/CMakeLists.txt
             _create_plugin("QGeoPositionInfoSourceFactoryNmea", "qtposition_nmea", "position", ["Positioning", "Network"])
@@ -1488,7 +1500,8 @@ class QtConan(ConanFile):
                 self.cpp_info.components["qtEntryPointPrivate"].defines.append("QT_NMEA_PLUGIN_HAS_SERIALPORT")
                 self.cpp_info.components["qtEntryPointPrivate"].requires.append("qtSerialPort")
 
-            _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", [])
+            # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/positionpoll/CMakeLists.txt
+            _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", ["Positioning"])
 
         if self.options.get_safe("qtsensors"):
             _create_module("Sensors", [])
