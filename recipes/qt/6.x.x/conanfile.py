@@ -1492,7 +1492,7 @@ class QtConan(ConanFile):
                 _create_plugin("QGeoPositionInfoSourceFactoryGeoclue2", "qtposition_geoclue2", "position", ["Positioning", "DBus"])
                 # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/gypsy/CMakeLists.txt
                 # TODO: This is untested
-                _create_plugin("QGeoPositionInfoSourceFactoryGypsy", "qtposition_gypsy", "position", ["Positioning", "Gypsy::Gypsy", "Gconf::Gconf"])
+                # _create_plugin("QGeoPositionInfoSourceFactoryGypsy", "qtposition_gypsy", "position", ["Positioning", "Gypsy::Gypsy", "Gconf::Gconf"])
 
             # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/nmea/CMakeLists.txt
             _create_plugin("QGeoPositionInfoSourceFactoryNmea", "qtposition_nmea", "position", ["Positioning", "Network"])
