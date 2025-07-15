@@ -1406,11 +1406,11 @@ class QtConan(ConanFile):
         if self.options.get_safe("qtimageformats"):
             _create_plugin("ICNSPlugin", "qicns", "imageformats", ["Gui"])
             # _create_plugin("QJp2Plugin", "qjp2", "imageformats", ["Gui"])
-            
+
             if is_apple_os(self):
                 _create_plugin("QMacHeifPlugin", "qmacheif", "imageformats", ["Gui"])
                 _create_plugin("QMacJp2Plugin", "qmacjp2", "imageformats", ["Gui"])
-            
+
             # _create_plugin("QMngPlugin", "qmng", "imageformats", ["Gui"])
             _create_plugin("QTgaPlugin", "qtga", "imageformats", ["Gui"])
             _create_plugin("QTiffPlugin", "qtiff", "imageformats", ["Gui"])
@@ -1443,10 +1443,10 @@ class QtConan(ConanFile):
                 _create_plugin("QGstreamerMediaPlugin", "gstreamermediaplugin", "multimedia", [
                     "gstreamer::gstreamer",
                     "gst-plugins-base::gst-plugins-base"])
-            
+
             if self.settings.os == "Windows":
                 # _create_plugin("QWindowsIntegrationPlugin", "qwindows", "platforms", ["Core", "Gui"])
-                _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Core", "Multimedia" 
+                _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Core", "Multimedia"
                                                                                            # , "WMF::WMF"
                                                                                            ])
                 self.cpp_info.components["qtQWindowsMediaPlugin"].system_libs += [
@@ -1474,9 +1474,15 @@ class QtConan(ConanFile):
 
         if self.options.get_safe("qtpositioning"):
             _create_module("Positioning", [])
-            if self.settings.os != "Windows":
+            if self.settings.os == "Windows":
+                _create_plugin("QGeoPositionInfoSourceFactoryWinRT", "qtposition_winrt", "position", ["Core", "Positioning"])
+                self.cpp_info.components["qtQGeoPositionInfoSourceFactoryWinRT"].system_libs += [
+                    "runtimeobject"
+                ]
+            else:
                 _create_plugin("QGeoPositionInfoSourceFactoryGeoclue2", "qtposition_geoclue2", "position", [])
-                _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", [])
+
+            _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", [])
 
         if self.options.get_safe("qtsensors"):
             _create_module("Sensors", [])
