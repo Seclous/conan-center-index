@@ -1497,8 +1497,8 @@ class QtConan(ConanFile):
             # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/nmea/CMakeLists.txt
             _create_plugin("QGeoPositionInfoSourceFactoryNmea", "qtposition_nmea", "position", ["Positioning", "Network"])
             if self.options.get_safe("qtserialport"):
-                self.cpp_info.components["qtEntryPointPrivate"].defines.append("QT_NMEA_PLUGIN_HAS_SERIALPORT")
-                self.cpp_info.components["qtEntryPointPrivate"].requires.append("qtSerialPort")
+                self.cpp_info.components["qtQGeoPositionInfoSourceFactoryNmea"].defines.append("QT_NMEA_PLUGIN_HAS_SERIALPORT")
+                self.cpp_info.components["qtQGeoPositionInfoSourceFactoryNmea"].requires.append("qtSerialPort")
 
             # https://github.com/qt/qtpositioning/blob/dev/src/plugins/position/positionpoll/CMakeLists.txt
             _create_plugin("QGeoPositionInfoSourceFactoryPoll", "qtposition_positionpoll", "position", ["Positioning"])
