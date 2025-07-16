@@ -93,6 +93,10 @@ patches:
       "patch_file": "patches/c72097e_6.8.3.diff"
       "patch_source": "https://codereview.qt-project.org/c/yocto/meta-qt5/+/192172"
       "patch_type": "bugfix"
+    - "base_path": "qtbase"
+      "patch_description": "Allow disabling int128 support"
+      "patch_file": "patches/allow_disabling_int128_6.8.3.patch"
+      "patch_type": "bugfix"
   "6.7.3":
     - "base_path": "qtwebengine"
       "patch_description": "Workaround for too long .rps file name"
