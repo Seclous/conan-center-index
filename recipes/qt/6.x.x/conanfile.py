@@ -1507,8 +1507,8 @@ class QtConan(ConanFile):
             _create_module("Sensors", [])
 
             # https://github.com/qt/qtsensors/blob/dev/src/sensorsquick/CMakeLists.txt
-            if qt_quick_enabled:
-                _create_module("SensorsQuick", ["Qml", "Sensors"])
+            #if qt_quick_enabled:
+            #    _create_module("SensorsQuick", ["Qml", "Sensors"])
 
             # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/generic/CMakeLists.txt
             _create_plugin("genericSensorPlugin", "qtsensors_generic", "sensors", ["Sensors"])
