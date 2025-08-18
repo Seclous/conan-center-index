@@ -1442,7 +1442,7 @@ class QtConan(ConanFile):
             _create_plugin("genericSensorPlugin", "qtsensors_generic", "sensors", ["Sensors"])
 
             # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/dummy/CMakeLists.txt
-            _create_plugin("dummySensorPlugin", "qtsensors_dummy", "sensors", ["Sensors"])
+            # _create_plugin("dummySensorPlugin", "qtsensors_dummy", "sensors", ["Sensors"])
 
             # https://github.com/qt/qtsensors/tree/dev/src/plugins/sensors/iio-sensor-proxy
             if self.options.with_dbus and self.settings.os in ["Linux", "FreeBSD"]:
