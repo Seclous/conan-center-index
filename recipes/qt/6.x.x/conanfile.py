@@ -1433,12 +1433,44 @@ class QtConan(ConanFile):
 
         if self.options.get_safe("qtsensors"):
             _create_module("Sensors", [])
-            _create_plugin("genericSensorPlugin", "qtsensors_generic", "sensors", [])
-            _create_plugin("IIOSensorProxySensorPlugin", "qtsensors_iio-sensor-proxy", "sensors", [])
-            if self.settings.os == "Linux":
-                _create_plugin("LinuxSensorPlugin", "qtsensors_linuxsys", "sensors", [])
-            _create_plugin("QtSensorGesturePlugin", "qtsensorgestures_plugin", "sensorgestures", [])
-            _create_plugin("QShakeSensorGesturePlugin", "qtsensorgestures_shakeplugin", "sensorgestures", [])
+
+            # https://github.com/qt/qtsensors/blob/dev/src/sensorsquick/CMakeLists.txt
+            if qt_quick_enabled:
+                _create_module("SensorsQuick", ["Qml", "Sensors"])
+
+            # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/generic/CMakeLists.txt
+            _create_plugin("genericSensorPlugin", "qtsensors_generic", "sensors", ["Sensors"])
+
+            # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/dummy/CMakeLists.txt
+            _create_plugin("dummySensorPlugin", "qtsensors_dummy", "sensors", ["Sensors"])
+
+            # https://github.com/qt/qtsensors/tree/dev/src/plugins/sensors/iio-sensor-proxy
+            if self.options.with_dbus and self.settings.os in ["Linux", "FreeBSD"]:
+                _create_plugin("IIOSensorProxySensorPlugin", "qtsensors_iio-sensor-proxy", "sensors", ["Sensors", "DBus"])
+
+            # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/android/CMakeLists.txt
+            if self.settings.os == "Android": # TODO: This is untested
+                _create_plugin("AndroidSensorPlugin", " qtsensors_android", "sensors", ["Sensors"])
+
+            # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/ios/CMakeLists.txt
+            if is_apple_os(self): # TODO: This is untested
+                _create_plugin("IOSSensorPlugin", "qtsensors_ios", "sensors", ["Sensors"])
+                if self.settings.os in ['iOS']:
+                    self.cpp_info.components["qtIOSSensorPlugin"].frameworks.append("CoreLocation")
+                if self.settings.os not in ['tvOS']:
+                    self.cpp_info.components["qtIOSSensorPlugin"].frameworks.append("CoreMotion")
+                if self.settings.os not in ['watchOS']:
+                    self.cpp_info.components["qtIOSSensorPlugin"].frameworks.append("UIKit")
+
+            # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/sensorfw/CMakeLists.txt
+            # TODO: Not yet ported to qt6 https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/CMakeLists.txt#L11-L14
+
+            if self.settings.os == "Windows":
+                # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/winrt/CMakeLists.txt
+                _create_plugin("WinRtSensorPlugin", "qtsensors_winrt", "sensors", ["Sensors"])
+                self.cpp_info.components["qtWinRtSensorPlugin"].system_libs += [
+                    "runtimeobject"
+                ]
 
         if self.options.get_safe("qtconnectivity"):
             _create_module("Bluetooth", ["Network"])
