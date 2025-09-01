@@ -57,6 +57,12 @@ class UriparserConan(ConanFile):
         tc.variables["URIPARSER_BUILD_WCHAR"] = self.options.with_wchar
         if is_msvc(self):
             tc.variables["URIPARSER_MSVC_RUNTIME"] = f"/{msvc_runtime_flag(self)}"
+
+        if str(self.settings.os) == "Emscripten":
+            # reallocarray is not supported by Emscripten but the autodetection wrongly enables it
+            # This writes a CACHE entry; CheckFunctionExists will see it and not override it
+            tc.variables["HAVE_REALLOCARRAY"] = "0"
+
         tc.generate()
 
     def build(self):
