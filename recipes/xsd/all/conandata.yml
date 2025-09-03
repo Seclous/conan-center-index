@@ -1,19 +1,13 @@
 sources:
   "4.2.0":
-    source:
-      url: "https://codesynthesis.com/download/xsd/4.2/xsd-4.2.0.tar.gz"
-      sha256: "2BED17C601CFB984F9A7501FD5C672F4F18EAC678F5BDEF6016971966ADD9145"
+    Linux:
+      url: "https://codesynthesis.com/download/xsd/4.2/linux/linux-glibc2.31/x86_64/xsd-4.2.0-x86_64-linux-glibc2.31.tar.xz"
+      sha256: "1fc140e943bbcd8e9de4bf32f4632194d202430d584701656bea98c50eabee7d"
+    Macos:
+      url: "https://codesynthesis.com/download/xsd/4.2/macos/macos13.5/aarch64/xsd-4.2.0-aarch64-macos13.5.tar.xz"
+      sha256: "3e5e4767c44401105ccba01399451387be60bf122ffd6ed28f9c13d0fce9677e"
     Windows:
       url: "https://codesynthesis.com/download/xsd/4.2/windows/windows10/x86_64/xsd-4.2.0-x86_64-windows10.zip"
       sha256: "0629F15C72224192EB1C8F89DD99CBC8DAE6F680F353B965C20ECADCB883D40E"
-#  "4.0.0":
-#    url: "https://codesynthesis.com/download/xsd/4.0/xsd-4.0.0+dep.tar.bz2"
-#    sha256: "eca52a9c8f52cdbe2ae4e364e4a909503493a0d51ea388fc6c9734565a859817"
 patches:
   "4.2.0": []
-#  "4.0.0":
-#    - patch_file: "patches/0002-missing-include.patch"
-#    - patch_file: "patches/0100-C++Parser_Expat_support.patch"
-#    - patch_file: "patches/0105-Fix_path_handling_bug.patch"
-#    - patch_file: "patches/0110-xerces-c3.2.patch"
-#    - patch_file: "patches/0700_hurd_PATH_MAX.patch"
