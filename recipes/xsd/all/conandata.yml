@@ -1,6 +1,11 @@
 sources:
   "4.2.0":
-    url: "https://codesynthesis.com/download/xsd/4.2/xsd-4.2.0.tar.gz"
+    source:
+      url: "https://codesynthesis.com/download/xsd/4.2/xsd-4.2.0.tar.gz"
+      sha256: "2BED17C601CFB984F9A7501FD5C672F4F18EAC678F5BDEF6016971966ADD9145"
+    Windows:
+      url: "https://codesynthesis.com/download/xsd/4.2/windows/windows10/x86_64/xsd-4.2.0-x86_64-windows10.zip"
+      sha256: "0629F15C72224192EB1C8F89DD99CBC8DAE6F680F353B965C20ECADCB883D40E"
 #  "4.0.0":
 #    url: "https://codesynthesis.com/download/xsd/4.0/xsd-4.0.0+dep.tar.bz2"
 #    sha256: "eca52a9c8f52cdbe2ae4e364e4a909503493a0d51ea388fc6c9734565a859817"
