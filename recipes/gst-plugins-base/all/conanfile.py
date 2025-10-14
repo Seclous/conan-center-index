@@ -102,52 +102,67 @@ class GStPluginsBaseConan(ConanFile):
             del self.options.with_xorg
 
     def requirements(self):
-        self.requires("zlib/1.2.12")
-        self.requires("glib/2.72.0")
-        self.requires("gstreamer/1.19.2")
+        # Core zlib: any 1.x release from 1.2 upwards
+        self.requires("zlib/[>=1.2 <2]")
+        # GLib 2.x, require at least the version we previously pinned
+        self.requires("glib/[>=2.72.0 <3]")
+        # GStreamer core should match the same minor series as gst-plugins-base
+        v = Version(self.version)
+        parts = str(v).split(".")
+        try:
+            major = int(parts[0])
+            minor = int(parts[1])
+        except Exception:
+            # Fallback: keep within 1.x
+            major = 1
+            minor = 0
+        gst_low = f"{major}.{minor}.0"
+        gst_high = f"{major}.{minor + 1}"
+        self.requires(f"gstreamer/[>={gst_low} <{gst_high}]")
         if self.options.get_safe("with_libalsa"):
-            self.requires("libalsa/1.2.5.1")
+            self.requires("libalsa/[>=1.2 <2]")
         if self.options.get_safe("with_xorg"):
             self.requires("xorg/system")
         if self.options.with_gl:
             self.requires("opengl/system")
             if self.settings.os == "Windows":
+                # Pin header-only specs to known compatible snapshots for reproducibility
                 self.requires("wglext/cci.20200813")
                 self.requires('glext/cci.20210420')
             if self.options.get_safe("with_egl"):
                 self.requires("egl/system")
             if self.options.get_safe("with_wayland"):
-                self.requires("wayland/1.20.0")
-                self.requires("wayland-protocols/1.25")
+                self.requires("wayland/[>=1.20 <2]")
+                self.requires("wayland-protocols/[>=1.25 <2]")
             if self.options.with_graphene:
-                self.requires("graphene/1.10.8")
+                self.requires("graphene/[>=1.10 <2]")
             if self.options.with_libpng:
-                self.requires("libpng/1.6.37")
+                self.requires("libpng/[>=1.6 <2]")
             if self.options.with_libjpeg == "libjpeg":
-                self.requires("libjpeg/9d")
+                self.requires("libjpeg/9f")
             elif self.options.with_libjpeg == "libjpeg-turbo":
-                self.requires("libjpeg-turbo/2.1.2")
+                self.requires("libjpeg-turbo/[>=2 <3]")
         if self.options.with_ogg:
-            self.requires("ogg/1.3.5")
+            self.requires("ogg/[>=1.3 <2]")
         if self.options.with_opus:
-            self.requires("opus/1.3.1")
+            self.requires("opus/[>=1.3 <2]")
         if self.options.with_theora:
-            self.requires("theora/1.1.1")
+            self.requires("theora/[>=1.1 <2]")
         if self.options.with_vorbis:
-            self.requires("vorbis/1.3.7")
+            self.requires("vorbis/[>=1.3 <2]")
         if self.options.with_pango:
-            self.requires("pango/1.49.3")
+            self.requires("pango/[>=1.49 <2]")
 
     def build_requirements(self):
-        self.tool_requires("meson/0.61.2")
-        self.tool_requires("pkgconf/1.7.4")
+        self.tool_requires("meson/[>=0.61.2 <1]")
+        self.tool_requires("pkgconf/[>=1.7 <2]")
         if self.settings.os == 'Windows':
-            self.tool_requires("winflexbison/2.5.24")
+            self.tool_requires("winflexbison/[>=2.5 <3]")
         else:
-            self.tool_requires("bison/3.7.6")
-            self.tool_requires("flex/2.6.4")
+            self.tool_requires("bison/[>=3.7 <4]")
+            self.tool_requires("flex/[>=2.6 <3]")
         if self.options.with_introspection:
-            self.tool_requires("gobject-introspection/1.70.0")
+            self.tool_requires("gobject-introspection/[>=1.70 <2]")
 
     def source(self):
         get(self, **self.conan_data["sources"][self.version],
