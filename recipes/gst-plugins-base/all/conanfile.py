@@ -1,9 +1,13 @@
-from conans import ConanFile, tools, Meson, VisualStudioBuildEnvironment
-from conans.errors import ConanInvalidConfiguration
+from conan import ConanFile
+from conan.errors import ConanInvalidConfiguration
+from conan.tools.files import get, patch, rmdir, rm, chdir
+from conan.tools.microsoft import is_msvc, VCVars
+from conan.tools.meson import Meson, MesonToolchain
+from conan.tools.scm import Version
 import glob
 import os
 import shutil
-
+from contextlib import nullcontext
 
 class GStPluginsBaseConan(ConanFile):
     name = "gst-plugins-base"
@@ -54,7 +58,7 @@ class GStPluginsBaseConan(ConanFile):
     _build_subfolder = "build_subfolder"
     exports_sources = ["patches/*.patch"]
 
-    generators = "pkg_config"
+    generators = ("PkgConfigDeps", "VirtualBuildEnv", "VirtualRunEnv")
 
     _gl_api = None
     _gl_platform = None
@@ -62,7 +66,7 @@ class GStPluginsBaseConan(ConanFile):
 
     @property
     def _is_msvc(self):
-        return self.settings.compiler == "Visual Studio"
+        return is_msvc(self)
 
     def validate(self):
         if not self.options["glib"].shared and self.options.shared:
@@ -71,9 +75,9 @@ class GStPluginsBaseConan(ConanFile):
         if self.options.shared != self.options["gstreamer"].shared:
             # https://gitlab.freedesktop.org/gstreamer/gst-build/-/issues/133
             raise ConanInvalidConfiguration("GStreamer and GstPlugins must be either all shared, or all static")
-        if tools.Version(self.version) >= "1.18.2" and\
-           self.settings.compiler == "gcc" and\
-           tools.Version(self.settings.compiler.version) < "5":
+        if Version(self.version) >= "1.18.2" and \
+           self.settings.compiler == "gcc" and \
+           Version(self.settings.compiler.version) < "5":
             raise ConanInvalidConfiguration(
                 "gst-plugins-base %s does not support gcc older than 5" % self.version
             )
@@ -135,20 +139,19 @@ class GStPluginsBaseConan(ConanFile):
             self.requires("pango/1.49.3")
 
     def build_requirements(self):
-        self.build_requires("meson/0.61.2")
-        if not tools.which("pkg-config"):
-            self.build_requires("pkgconf/1.7.4")
+        self.tool_requires("meson/0.61.2")
+        self.tool_requires("pkgconf/1.7.4")
         if self.settings.os == 'Windows':
-            self.build_requires("winflexbison/2.5.24")
+            self.tool_requires("winflexbison/2.5.24")
         else:
-            self.build_requires("bison/3.7.6")
-            self.build_requires("flex/2.6.4")
+            self.tool_requires("bison/3.7.6")
+            self.tool_requires("flex/2.6.4")
         if self.options.with_introspection:
-            self.build_requires("gobject-introspection/1.70.0")
+            self.tool_requires("gobject-introspection/1.70.0")
 
     def source(self):
-        tools.get(**self.conan_data["sources"][self.version],
-                  destination=self._source_subfolder, strip_root=True)
+        get(self, **self.conan_data["sources"][self.version],
+            destination=self._source_subfolder, strip_root=True)
 
     def _gl_config(self):
         if not self._gl_api or not self._gl_platform or not self._gl_winsys:
@@ -202,10 +205,13 @@ class GStPluginsBaseConan(ConanFile):
             add_flag("cpp_link_args", value)
 
         meson = Meson(self)
-        if self.settings.compiler == "Visual Studio":
+        if self._is_msvc:
             add_linker_flag("-lws2_32")
-            add_compiler_flag("-%s" % self.settings.compiler.runtime)
-            if int(str(self.settings.compiler.version)) < 14:
+            rt = self.settings.get_safe("compiler.runtime")
+            if rt:
+                add_compiler_flag(f"-{rt}")
+            ver = self.settings.get_safe("compiler.version")
+            if ver and int(str(ver)) < 14:
                 add_compiler_flag("-Dsnprintf=_snprintf")
         if self.settings.get_safe("compiler.runtime"):
             defs["b_vscrt"] = str(self.settings.compiler.runtime).lower()
@@ -242,18 +248,22 @@ class GStPluginsBaseConan(ConanFile):
                         defs=defs)
         return meson
 
-    def build(self):
-        for patch in self.conan_data.get("patches", {}).get(self.version, []):
-            tools.patch(**patch)
+    def generate(self):
+        tc = MesonToolchain(self)
+        tc.generate()
 
-        with tools.environment_append(VisualStudioBuildEnvironment(self).vars) if self._is_msvc else tools.no_op():
+    def build(self):
+        for p in self.conan_data.get("patches", {}).get(self.version, []):
+            patch(self, **p)
+
+        with (VCVars(self) if self._is_msvc else nullcontext()):
             meson = self._configure_meson()
             meson.build()
 
     def _fix_library_names(self, path):
         # regression in 1.16
-        if self.settings.compiler == "Visual Studio":
-            with tools.chdir(path):
+        if self._is_msvc:
+            with chdir(self, path):
                 for filename_old in glob.glob("*.a"):
                     filename_new = filename_old[3:-2] + ".lib"
                     self.output.info("rename %s into %s" % (filename_old, filename_new))
@@ -261,16 +271,16 @@ class GStPluginsBaseConan(ConanFile):
 
     def package(self):
         self.copy(pattern="COPYING", dst="licenses", src=self._source_subfolder)
-        with tools.environment_append(VisualStudioBuildEnvironment(self).vars) if self._is_msvc else tools.no_op():
+        with (VCVars(self) if self._is_msvc else nullcontext()):
             meson = self._configure_meson()
             meson.install()
 
         self._fix_library_names(os.path.join(self.package_folder, "lib"))
         self._fix_library_names(os.path.join(self.package_folder, "lib", "gstreamer-1.0"))
-        tools.rmdir(os.path.join(self.package_folder, "share"))
-        tools.rmdir(os.path.join(self.package_folder, "lib", "pkgconfig"))
-        tools.rmdir(os.path.join(self.package_folder, "lib", "gstreamer-1.0", "pkgconfig"))
-        tools.remove_files_by_mask(self.package_folder, "*.pdb")
+        rmdir(self, os.path.join(self.package_folder, "share"))
+        rmdir(self, os.path.join(self.package_folder, "lib", "pkgconfig"))
+        rmdir(self, os.path.join(self.package_folder, "lib", "gstreamer-1.0", "pkgconfig"))
+        rm(self, "*.pdb", self.package_folder, recursive=True)
 
     def package_id(self):
         self.info.requires["glib"].full_package_mode()
@@ -292,10 +302,11 @@ class GStPluginsBaseConan(ConanFile):
             "libexecdir": "${prefix}/libexec"
         }
         pkgconfig_custom_content = "\n".join("{}={}".format(key, value) for key, value in pkgconfig_variables.items())
+        self.cpp_info.set_property("pkg_config_custom_content", pkgconfig_custom_content)
 
         if self.options.shared:
             self.output.info("Appending GST_PLUGIN_PATH env var : %s" % gst_plugin_path)
-            self.env_info.GST_PLUGIN_PATH.append(gst_plugin_path)
+            self.runenv_info.append_path("GST_PLUGIN_PATH", gst_plugin_path)
 
         # Plugins ('gst')
         self.cpp_info.components["gstadder"].libs = ["gstadder"]
