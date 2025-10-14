@@ -1,6 +1,7 @@
 from conan import ConanFile
 from conan.tools.cmake import CMake, cmake_layout
 from conan.tools.build import can_run
+from conan.tools.scm import Version
 import os
 
 
@@ -14,6 +15,20 @@ class TestPackageConan(ConanFile):
     def requirements(self):
         # Require the package being created under test
         self.requires(self.tested_reference_str)
+        # Explicitly require gstreamer so CMakeDeps generates its config files
+        # Match the same minor series as the gst-plugins-base under test
+        ref = self.tested_reference_str or ""
+        try:
+            ver_str = ref.split("/")[1].split("@")[0]
+            v = Version(ver_str)
+            parts = str(v).split(".")
+            major = int(parts[0])
+            minor = int(parts[1])
+        except Exception:
+            major, minor = 1, 0
+        low = f"{major}.{minor}.0"
+        high = f"{major}.{minor+1}"
+        self.requires(f"gstreamer/[>={low} <{high}]")
 
     def build(self):
         cmake = CMake(self)
