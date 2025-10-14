@@ -1,6 +1,6 @@
 from conan import ConanFile
 from conan.errors import ConanInvalidConfiguration
-from conan.tools.files import get, patch, rmdir, rm, chdir
+from conan.tools.files import get, patch, rmdir, rm, chdir, copy as cf_copy
 from conan.tools.microsoft import is_msvc, VCVars
 from conan.tools.meson import Meson, MesonToolchain
 from conan.tools.scm import Version
@@ -350,7 +350,8 @@ class GStPluginsBaseConan(ConanFile):
                     shutil.move(filename_old, filename_new)
 
     def package(self):
-        self.copy(pattern="COPYING", dst="licenses", src=self._source_subfolder)
+        # Conan v2: use tools.files.copy instead of removed self.copy
+        cf_copy(self, pattern="COPYING", src=self._source_subfolder, dst=os.path.join(self.package_folder, "licenses"))
         with (VCVars(self) if self._is_msvc else nullcontext()):
             meson = self._configure_meson()
             meson.install()
