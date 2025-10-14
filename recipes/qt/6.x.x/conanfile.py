@@ -1183,12 +1183,17 @@ class QtConan(ConanFile):
                             "AssetsLibrary", "UniformTypeIdentifiers", "Photos",
                         ]
                 elif self.settings.os == "watchOS":
-                    _create_plugin("QMinimalIntegrationPlugin", "qminimal", "platforms", [])
+                    pass
             elif self.settings.os == "Emscripten":
                 _create_plugin("QWasmIntegrationPlugin", "qwasm", "platforms", ["Core", "Gui"])
             elif self.options.get_safe("with_x11", False):
                 _create_module("XcbQpaPrivate", ["xkbcommon::libxkbcommon-x11", "xorg::xorg"], has_include_dir=False)
                 _create_plugin("QXcbIntegrationPlugin", "qxcb", "platforms", ["Core", "Gui", "XcbQpaPrivate"])
+
+            # https://github.com/qt/qtbase/blob/v6.6.1/src/plugins/platforms/minimal/CMakeLists.txt
+            _create_plugin("QMinimalIntegrationPlugin", "qminimal", "platforms", ["Gui"])
+            # https://github.com/qt/qtbase/blob/v6.6.1/src/plugins/platforms/offscreen/CMakeLists.txt
+            _create_plugin("QOffscreenIntegrationPlugin", "qoffscreen", "platforms", ["Gui"])
 
             _create_plugin("QGifPlugin", "qgif", "imageformats", ["Gui"])
             _create_plugin("QIcoPlugin", "qico", "imageformats", ["Gui"])
