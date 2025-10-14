@@ -4,6 +4,7 @@ from conan.tools.files import get, patch, rmdir, rm, chdir
 from conan.tools.microsoft import is_msvc, VCVars
 from conan.tools.meson import Meson, MesonToolchain
 from conan.tools.scm import Version
+from conan.tools.layout import basic_layout
 import glob
 import os
 import shutil
@@ -54,7 +55,7 @@ class GStPluginsBaseConan(ConanFile):
         "with_xorg": True,
         "with_introspection": False,
         }
-    _source_subfolder = "source_subfolder"
+    _source_subfolder = "."
     _build_subfolder = "build_subfolder"
     exports_sources = ["patches/*.patch"]
 
@@ -64,17 +65,16 @@ class GStPluginsBaseConan(ConanFile):
     _gl_platform = None
     _gl_winsys = None
 
+    def layout(self):
+        basic_layout(self)
+
     @property
     def _is_msvc(self):
         return is_msvc(self)
 
     def validate(self):
-        if not self.options["glib"].shared and self.options.shared:
-            # https://gitlab.freedesktop.org/gstreamer/gst-build/-/issues/133
-            raise ConanInvalidConfiguration("shared GStreamer cannot link to static GLib")
-        if self.options.shared != self.options["gstreamer"].shared:
-            # https://gitlab.freedesktop.org/gstreamer/gst-build/-/issues/133
-            raise ConanInvalidConfiguration("GStreamer and GstPlugins must be either all shared, or all static")
+        # Note: In Conan v2, dependency options are not available via self.options["dep"].
+        # Do not access glib/gstreamer options here. Enforce consistency in configure().
         if Version(self.version) >= "1.18.2" and \
            self.settings.compiler == "gcc" and \
            Version(self.settings.compiler.version) < "5":
@@ -89,7 +89,11 @@ class GStPluginsBaseConan(ConanFile):
             del self.options.fPIC
         del self.settings.compiler.libcxx
         del self.settings.compiler.cppstd
+        # Enforce dependency options for consistency (Conan v2-safe: set, don't read)
         self.options['gstreamer'].shared = self.options.shared
+        if self.options.shared:
+            # shared GStreamer cannot link to static GLib; force glib to be shared
+            self.options['glib'].shared = True
 
     def config_options(self):
         if self.settings.os == 'Windows':
@@ -258,13 +262,74 @@ class GStPluginsBaseConan(ConanFile):
         defs["x11"] = "enabled" if self.options.get_safe("with_xorg") else "disabled"
         defs["xshm"] = "enabled" if self.options.get_safe("with_xorg") else "disabled"
         defs["xvideo"] = "enabled" if self.options.get_safe("with_xorg") else "disabled"
-        meson.configure(build_folder=self._build_subfolder,
-                        source_folder=self._source_subfolder,
-                        defs=defs)
+        # Configure Meson using Conan v2 helper (uses conanfile.build_folder/source_folder automatically)
+        meson.configure()
         return meson
 
     def generate(self):
         tc = MesonToolchain(self)
+        # Compute project options previously passed via meson.configure(defs=...)
+        defs = {}
+
+        def add_flag(name, value):
+            if name in defs:
+                defs[name] += " " + value
+            else:
+                defs[name] = value
+
+        def add_compiler_flag(value):
+            add_flag("c_args", value)
+            add_flag("cpp_args", value)
+
+        def add_linker_flag(value):
+            add_flag("c_link_args", value)
+            add_flag("cpp_link_args", value)
+
+        # MSVC specific flags
+        if self._is_msvc:
+            add_linker_flag("-lws2_32")
+            rt = self.settings.get_safe("compiler.runtime")
+            if rt:
+                add_compiler_flag(f"-{rt}")
+            ver = self.settings.get_safe("compiler.version")
+            if ver and int(str(ver)) < 14:
+                add_compiler_flag("-Dsnprintf=_snprintf")
+        if self.settings.get_safe("compiler.runtime"):
+            defs["b_vscrt"] = str(self.settings.compiler.runtime).lower()
+
+        # GL options
+        gl_api, gl_platform, gl_winsys = self._gl_config()
+
+        defs["tools"] = "disabled"
+        defs["examples"] = "disabled"
+        defs["tests"] = "disabled"
+        defs["wrap_mode"] = "nofallback"
+        defs["introspection"] = "enabled" if self.options.with_introspection else "disabled"
+        defs["orc"] = "disabled"  # TODO: orc
+        defs["gl"] = "enabled" if self.options.with_gl else "disabled"
+        defs["gl-graphene"] = "enabled" if self.options.with_gl and self.options.with_graphene else "disabled"
+        defs["gl-png"] = "enabled" if self.options.with_gl and self.options.with_libpng else "disabled"
+        defs["gl-jpeg"] = "enabled" if self.options.with_gl and self.options.with_libjpeg else "disabled"
+        defs["gl_api"] = gl_api
+        defs["gl_platform"] = gl_platform
+        defs["gl_winsys"] = gl_winsys
+        defs["alsa"] = "enabled" if self.options.get_safe("with_libalsa") else "disabled"
+        defs["cdparanoia"] = "disabled"
+        defs["libvisual"] = "disabled"
+        defs["ogg"] = "enabled" if self.options.with_ogg else "disabled"
+        defs["opus"] = "enabled" if self.options.with_opus else "disabled"
+        defs["pango"] = "enabled" if self.options.with_pango else "disabled"
+        defs["theora"] = "enabled" if self.options.with_theora else "disabled"
+        defs["tremor"] = "disabled"
+        defs["vorbis"] = "enabled" if self.options.with_vorbis else "disabled"
+        defs["x11"] = "enabled" if self.options.get_safe("with_xorg") else "disabled"
+        defs["xshm"] = "enabled" if self.options.get_safe("with_xorg") else "disabled"
+        defs["xvideo"] = "enabled" if self.options.get_safe("with_xorg") else "disabled"
+
+        # Assign to MesonToolchain project options
+        for k, v in defs.items():
+            tc.project_options[k] = v
+
         tc.generate()
 
     def build(self):
