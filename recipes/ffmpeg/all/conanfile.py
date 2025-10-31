@@ -60,6 +60,7 @@ class FFMpegConan(ConanFile):
         "with_libx265": [True, False],
         "with_libvpx": [True, False],
         "with_libvpl": [True, False],
+        "with_nvenc": [True, False],
         "with_libmp3lame": [True, False],
         "with_libfdk_aac": [True, False],
         "with_libwebp": [True, False],
@@ -150,6 +151,7 @@ class FFMpegConan(ConanFile):
         "with_libx265": True,
         "with_libvpx": True,
         "with_libvpl": False,
+        "with_nvenc": False,
         "with_libmp3lame": True,
         "with_libfdk_aac": True,
         "with_libwebp": True,
@@ -375,6 +377,8 @@ class FFMpegConan(ConanFile):
             self.requires("libdrm/2.4.119")
         if self.options.with_libvpl:
             self.requires("libvpl/[>=2.6 <3]")
+        if self.options.with_nvenc:
+            self.requires("nv-codec-headers/13.0.19.0")
 
     def validate(self):
         if self.options.with_ssl == "securetransport" and not is_apple_os(self):
@@ -642,6 +646,9 @@ class FFMpegConan(ConanFile):
             "enable-filter", self.options.enable_filters))
         args.extend(self._split_and_format_options_string(
             "disable-filter", self.options.disable_filters))
+            
+        if self.options.get_safe("with_nvenc"):
+            args.append("--enable-nvenc")
 
         if self._version_supports_libsvtav1:
             args.append(opt_enable_disable("libsvtav1", self.options.get_safe("with_libsvtav1")))
@@ -997,3 +1004,8 @@ class FFMpegConan(ConanFile):
         if self.options.get_safe("with_vulkan"):
             avutil.requires.append("vulkan-loader::vulkan-loader")
 
+        if self.options.get_safe("with_nvenc"):
+            try:
+                self.cpp_info.requires.append("nv-codec-headers::nv-codec-headers")
+            except Exception:
+                self.cpp_info.requires.append("nv-codec-headers")
