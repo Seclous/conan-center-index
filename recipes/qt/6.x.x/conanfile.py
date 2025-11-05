@@ -1,6 +1,6 @@
 import configparser
 import glob
-import os
+import os, subprocess
 import platform
 import textwrap
 
@@ -62,6 +62,7 @@ class QtConan(ConanFile):
         "with_libalsa": [True, False],
         "with_openal": [True, False],
         "with_gstreamer": [True, False],
+        "with_ffmpeg": [True, False],
         "with_pulseaudio": [True, False],
         "with_gssapi": [True, False],
         "with_md4c": [True, False],
@@ -107,6 +108,7 @@ class QtConan(ConanFile):
         "with_libalsa": False,
         "with_openal": True,
         "with_gstreamer": False,
+        "with_ffmpeg": False,
         "with_pulseaudio": False,
         "with_gssapi": False,
         "with_md4c": True,
@@ -246,6 +248,7 @@ class QtConan(ConanFile):
 
         if not self.options.get_safe("qtmultimedia"):
             self.options.rm_safe("with_libalsa")
+            self.options.rm_safe("with_ffmpeg")
             del self.options.with_openal
             del self.options.with_gstreamer
             del self.options.with_pulseaudio
@@ -319,8 +322,8 @@ class QtConan(ConanFile):
         if "MT" in self.settings.get_safe("compiler.runtime", default="") and self.options.shared:
             raise ConanInvalidConfiguration("Qt cannot be built as shared library with static runtime")
 
-        if self.options.get_safe("with_pulseaudio", False) or self.options.get_safe("with_libalsa", False):
-            raise ConanInvalidConfiguration("alsa and pulseaudio are not supported (QTBUG-95116), please disable them.")
+#        if self.options.get_safe("with_pulseaudio", False) or self.options.get_safe("with_libalsa", False):
+#            raise ConanInvalidConfiguration("alsa and pulseaudio are not supported (QTBUG-95116), please disable them.")
         if not self.options.with_pcre2:
             raise ConanInvalidConfiguration("pcre2 is actually required by qt (QTBUG-92454). please use option qt:with_pcre2=True")
 
@@ -412,6 +415,8 @@ class QtConan(ConanFile):
         if self.options.get_safe("with_gstreamer", False):
             self.requires("gstreamer/1.19.2")
             self.requires("gst-plugins-base/1.19.2")
+        if self.options.get_safe("with_ffmpeg", False):
+            self.requires("ffmpeg/[>=7.1.1 <8]@seclous/patch")
         if self.options.get_safe("with_pulseaudio", False):
             self.requires("pulseaudio/14.2")
         if self.options.with_dbus:
@@ -463,7 +468,7 @@ class QtConan(ConanFile):
         # don't override https://github.com/qt/qtmultimedia/blob/dev/cmake/FindGStreamer.cmake
         tc.set_property("gstreamer", "cmake_file_name", "gstreamer_conan")
         tc.set_property("gstreamer", "cmake_find_mode", "module")
-
+        
         tc.generate()
 
         for f in glob.glob("*.cmake"):
@@ -659,8 +664,20 @@ class QtConan(ConanFile):
 
         tc.variables["QT_USE_VCPKG"] = False
         tc.cache_variables["QT_USE_VCPKG"] = False
+        
+        # 1) Prefer Module mode over Config mode, so CMake will use FindFFmpeg.cmake
+        tc.cache_variables["CMAKE_FIND_PACKAGE_PREFER_CONFIG"] = False
 
+        # 2) Ensure CMake can see Qt’s FindFFmpeg.cmake
+        extra_modules = [
+            os.path.join(self.source_folder, "qtmultimedia", "cmake"),
+            os.path.join(self.source_folder, "qtbase", "cmake", "3rdparty", "extra-cmake-modules", "find-modules"),
+        ]
+        tc.cache_variables["CMAKE_MODULE_PATH"] = ";".join(extra_modules)        
+        
         tc.generate()
+        
+        
 
     def package_id(self):
         del self.info.options.cross_compile
@@ -816,6 +833,31 @@ class QtConan(ConanFile):
             save(self, ".qmake.stash", "")
             save(self, ".qmake.super", "")
         cmake = CMake(self)
+        
+        # Patch out the pulseaudio requirement on linux - note, that this will leave ffmpeg unable to deal with audio.
+        # Attempts to get pulseaudio to build failed so far.
+        qtbi = os.path.join(self.source_folder, "qtmultimedia", "src", "multimedia", "configure.cmake")
+        replace_in_file(
+            self, qtbi,
+            'FFmpeg_FOUND AND (APPLE OR WIN32 OR ANDROID OR QNX OR QT_FEATURE_pulseaudio)',
+            'FFmpeg_FOUND'
+        )      
+
+        # Make pkg-config see Conan’s generator dir + the ffmpeg package’s pc files
+        os.environ["PKG_CONFIG_PATH"] = f"{self.generators_folder}:{os.environ.get('PKG_CONFIG_PATH','')}"
+        ffpkg = self.dependencies.get("ffmpeg")
+        if ffpkg:
+            ff_pc = os.path.join(ffpkg.package_folder, "lib", "pkgconfig")
+            os.environ["PKG_CONFIG_PATH"] = f"{ff_pc}:{os.environ['PKG_CONFIG_PATH']}"
+
+        # sanity print (keep)
+        for mod in ("libavformat","libavcodec","libavutil","libswresample","libswscale"):
+            try:
+                v = subprocess.check_output(["pkg-config","--modversion",mod], text=True).strip()
+                print(f"pkg-config: {mod} = {v}")
+            except subprocess.CalledProcessError as e:
+                print(f"pkg-config: {mod} NOT FOUND"); print(e.output)
+        
         cmake.configure()
         cmake.build()
 
@@ -1376,6 +1418,15 @@ class QtConan(ConanFile):
                 _create_plugin("QGstreamerMediaPlugin", "gstreamermediaplugin", "multimedia", [
                     "gstreamer::gstreamer",
                     "gst-plugins-base::gst-plugins-base"])
+            elif self.options.get_safe("with_ffmpeg"):
+                _create_plugin("QFFmpegMediaPlugin", "ffmpegmediaplugin", "multimedia", [
+                    "Multimedia",
+                    "FFmpeg::avcodec",
+                    "FFmpeg::avformat",
+                    "FFmpeg::avutil",
+                    "FFmpeg::swresample",
+                    "FFmpeg::swscale"
+                    ])
 
             if self.settings.os == "Windows":
                 _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Multimedia"
