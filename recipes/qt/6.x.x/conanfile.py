@@ -184,8 +184,15 @@ class QtConan(ConanFile):
                 self.output.debug(f"Qt6: Removing {submodule} option as it is not in the module tree for this version, or is marked as obsolete or ignore")
                 self.options.rm_safe(submodule)
 
+
+
     def configure(self):
-        if not self.options.gui:
+        # If we are in the *build* context (tool-require), disable gui setting and thus dependencies
+        if self.context == "build":
+            del self.options.gui
+            # TODO: Most options can probably be deleted here. In build context we only need things like moc, rcc, uic, qmlcachegen
+
+        if not self.options.get_safe("gui"):
             del self.options.opengl
             del self.options.with_vulkan
             del self.options.with_freetype
@@ -296,7 +303,7 @@ class QtConan(ConanFile):
             if not self.options.shared:
                 raise ConanInvalidConfiguration("Static builds of Qt WebEngine are not supported")
 
-            if not (self.options.gui and self.options.qtdeclarative and self.options.qtwebchannel):
+            if not (self.options.get_safe("gui") and self.options.qtdeclarative and self.options.qtwebchannel):
                 raise ConanInvalidConfiguration("option qt:qtwebengine requires also qt:gui, qt:qtdeclarative and qt:qtwebchannel")
             if not self.options.with_dbus and self.settings.os == "Linux":
                 raise ConanInvalidConfiguration("option qt:webengine requires also qt:with_dbus on Linux")
@@ -304,7 +311,7 @@ class QtConan(ConanFile):
             if hasattr(self, "settings_build") and cross_building(self, skip_x64_x86=True):
                 raise ConanInvalidConfiguration("Cross compiling Qt WebEngine is not supported")
 
-        if self.options.widgets and not self.options.gui:
+        if self.options.widgets and not self.options.get_safe("gui"):
             raise ConanInvalidConfiguration("using option qt:widgets without option qt:gui is not possible. "
                                             "You can either disable qt:widgets or enable qt:gui")
         if self.settings.os == "Android" and self.options.get_safe("opengl", "no") == "desktop":
@@ -440,7 +447,7 @@ class QtConan(ConanFile):
         if self.options.qtwayland:
             self.tool_requires("wayland/1.22.0")
         if cross_building(self):
-            self.tool_requires(f"qt/{self.version}")
+            self.tool_requires(str(self.ref))
 
     def generate(self):
         ms = VirtualBuildEnv(self)
@@ -874,7 +881,7 @@ class QtConan(ConanFile):
         targets = ["moc", "qlalr", "rcc", "tracegen", "cmake_automoc_parser", "qmake", "qtpaths", "syncqt", "tracepointgen"]
         if self.options.with_dbus:
             targets.extend(["qdbuscpp2xml", "qdbusxml2cpp"])
-        if self.options.gui:
+        if self.options.get_safe("gui"):
             targets.append("qvkgen")
         if self.options.widgets:
             targets.append("uic")
@@ -944,7 +951,7 @@ class QtConan(ConanFile):
 
         _create_private_module("Core", ["Core"])
 
-        if self.options.gui:
+        if self.options.get_safe("gui"):
             _create_private_module("Gui", ["CorePrivate", "Gui"])
 
         if self.options.widgets:
@@ -955,7 +962,7 @@ class QtConan(ConanFile):
             save(self, os.path.join(self.package_folder, "lib", "cmake", "Qt6Qml", "conan_qt_qt6_policies.cmake"), textwrap.dedent("""\
                     set(QT_KNOWN_POLICY_QTP0001 TRUE)
                     """))
-            if self.options.gui and self.options.qtshadertools:
+            if self.options.get_safe("gui") and self.options.qtshadertools:
                 _create_private_module("Quick", ["CorePrivate", "GuiPrivate", "QmlPrivate", "Quick"])
 
         if self.settings.os in ["Windows", "iOS"]:
@@ -1077,7 +1084,7 @@ class QtConan(ConanFile):
                 self.cpp_info.components["qtDBus"].system_libs.append("netapi32")
                 self.cpp_info.components["qtDBus"].system_libs.append("user32")
                 self.cpp_info.components["qtDBus"].system_libs.append("ws2_32")
-        if self.options.gui:
+        if self.options.get_safe("gui"):
             gui_reqs = []
             if self.options.with_dbus:
                 gui_reqs.append("DBus")
@@ -1233,9 +1240,9 @@ class QtConan(ConanFile):
                 self.cpp_info.components["qtWidgets"].system_libs += [
                     "dwmapi", "shell32", "uxtheme",
                 ]
-        if self.options.gui and self.options.widgets:
+        if self.options.get_safe("gui") and self.options.widgets:
             _create_module("PrintSupport", ["Gui", "Widgets"])
-        if self.options.get_safe("opengl", "no") != "no" and self.options.gui:
+        if self.options.get_safe("opengl", "no") != "no" and self.options.get_safe("gui"):
             _create_module("OpenGL", ["Gui"])
         if self.options.widgets and self.options.get_safe("opengl", "no") != "no":
             _create_module("OpenGLWidgets", ["OpenGL", "Widgets"])
@@ -1246,7 +1253,7 @@ class QtConan(ConanFile):
             _create_module("Core5Compat", [])
 
         # since https://github.com/qt/qtdeclarative/commit/4fb84137f1c0a49d64b8bef66fef8a4384cc2a68
-        qt_quick_enabled = self.options.gui and self.options.qtshadertools
+        qt_quick_enabled = self.options.get_safe("gui") and self.options.qtshadertools
 
         if self.options.qtdeclarative:
             _create_module("Qml", ["Network"])
@@ -1263,7 +1270,7 @@ class QtConan(ConanFile):
                 _create_module("QuickTest", ["Test", "Quick"])
             _create_module("QmlWorkerScript", ["Qml"])
 
-        if self.options.qttools and self.options.gui and self.options.widgets:
+        if self.options.qttools and self.options.get_safe("gui") and self.options.widgets:
             self.cpp_info.components["qtLinguistTools"].set_property("cmake_target_name", "Qt6::LinguistTools")
             _create_module("UiPlugin", ["Gui", "Widgets"])
             self.cpp_info.components["qtUiPlugin"].libs = [] # this is a collection of abstract classes, so this is header-only
@@ -1272,7 +1279,7 @@ class QtConan(ConanFile):
             _create_module("Designer", ["Gui", "UiPlugin", "Widgets", "Xml"])
             _create_module("Help", ["Gui", "Sql", "Widgets"])
 
-        if self.options.qtshadertools and self.options.gui:
+        if self.options.qtshadertools and self.options.get_safe("gui"):
             _create_module("ShaderTools", ["Gui"])
 
         if self.options.qtquick3d and qt_quick_enabled:
@@ -1285,14 +1292,14 @@ class QtConan(ConanFile):
             _create_module("QuickControls2", ["Gui", "Quick"])
             _create_module("QuickTemplates2", ["Gui", "Quick"])
 
-        if self.options.qtsvg and self.options.gui:
+        if self.options.qtsvg and self.options.get_safe("gui"):
             _create_module("Svg", ["Gui"])
             _create_plugin("QSvgIconPlugin", "qsvgicon", "iconengines", [])
             _create_plugin("QSvgPlugin", "qsvg", "imageformats", [])
             if self.options.widgets:
                 _create_module("SvgWidgets", ["Gui", "Svg", "Widgets"])
 
-        if self.options.qtwayland and self.options.gui:
+        if self.options.qtwayland and self.options.get_safe("gui"):
             _create_module("WaylandClient", ["Gui", "wayland::wayland-client"])
             _create_module("WaylandCompositor", ["Gui", "wayland::wayland-server"])
 
@@ -1594,7 +1601,7 @@ class QtConan(ConanFile):
                 if self.options.with_gssapi:
                     # https://github.com/qt/qtbase/blob/v6.6.1/src/network/CMakeLists.txt#L250C56-L253
                     self.cpp_info.components["qtNetwork"].frameworks.append("GSS")
-                if self.options.gui and self.options.widgets:
+                if self.options.get_safe("gui") and self.options.widgets:
                     # https://github.com/qt/qtbase/blob/v6.6.1/src/printsupport/CMakeLists.txt#L52-L63
                     self.cpp_info.components["qtPrintSupport"].system_libs.append("cups")
                     self.cpp_info.components["qtPrintSupport"].frameworks.append("ApplicationServices")
