@@ -39,12 +39,12 @@ class XalanCConan(ConanFile):
         if self.options.shared:
             self.options.rm_safe("fPIC")
         self.options["xerces-c"].shared = self.options.shared
-        # This library requires C++17
-        self.settings.compiler.cppstd = "17"
+        # This library requires C++20
+        self.settings.compiler.cppstd = "20"
 
     def validate(self):
-        """Ensure that the compiler supports at least C++17."""
-        required_cppstd = "17"
+        """Ensure that the compiler supports at least C++20."""
+        required_cppstd = "20"
 
     def requirements(self):
         self.requires("xerces-c/[>=3.3.0 <3.4.0]", transitive_headers = True)  # XML parser
