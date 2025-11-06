@@ -168,7 +168,7 @@ class QtConan(ConanFile):
         if self.settings.os not in ["Linux", "FreeBSD"]:
             del self.options.with_icu
             del self.options.with_fontconfig
-            self.options.with_glib = False
+            del self.options.with_glib
             del self.options.with_libalsa
             del self.options.with_x11
             del self.options.with_egl
@@ -177,7 +177,7 @@ class QtConan(ConanFile):
             self.options.opengl = "dynamic"
             del self.options.with_gssapi
         if self.settings.os != "Linux":
-            self.options.qtwayland = False
+            del self.options.qtwayland
 
         for submodule in self._submodules:
             if submodule not in self._get_module_tree:
@@ -185,22 +185,44 @@ class QtConan(ConanFile):
                 self.options.rm_safe(submodule)
 
 
-
     def configure(self):
         # If we are in the *build* context (tool-require), disable gui setting and thus dependencies
         if self.context == "build":
-            del self.options.gui
+            # del self.options.widgets
+            self.options.rm_safe("opengl")
+            self.options.rm_safe("qtwayland")
+            self.options.rm_safe("qtwayland")
+            self.options.rm_safe("with_vulkan")
+            self.options.rm_safe("with_freetype")
+            self.options.rm_safe("with_fontconfig")
+            self.options.rm_safe("with_harfbuzz")
+            self.options.rm_safe("with_libjpeg")
+            self.options.rm_safe("with_libpng")
+            self.options.rm_safe("with_md4c")
+            self.options.rm_safe("with_x11")
+            self.options.rm_safe("with_egl")
+            self.options.rm_safe("with_wayland")
+            self.options.rm_safe("openssl")
+            # self.options.rm_safe("with_pcre2")
+            self.options.rm_safe("with_doubleconversion")
+            self.options.rm_safe("with_sqlite3")
+            self.options.rm_safe("with_pq")
+            self.options.rm_safe("with_brotli")
+            self.options.rm_safe("with_odbc")
+            self.options.rm_safe("with_openal")
+            self.options.rm_safe("with_dbus")
+            self.options.rm_safe("with_zstd")
             # TODO: Most options can probably be deleted here. In build context we only need things like moc, rcc, uic, qmlcachegen
 
         if not self.options.get_safe("gui"):
-            del self.options.opengl
-            del self.options.with_vulkan
-            del self.options.with_freetype
+            self.options.rm_safe("opengl")
+            self.options.rm_safe("with_vulkan")
+            self.options.rm_safe("with_freetype")
             self.options.rm_safe("with_fontconfig")
-            del self.options.with_harfbuzz
-            del self.options.with_libjpeg
-            del self.options.with_libpng
-            del self.options.with_md4c
+            self.options.rm_safe("with_harfbuzz")
+            self.options.rm_safe("with_libjpeg")
+            self.options.rm_safe("with_libpng")
+            self.options.rm_safe("with_md4c")
             self.options.rm_safe("with_x11")
             self.options.rm_safe("with_egl")
 
@@ -253,9 +275,9 @@ class QtConan(ConanFile):
 
         if not self.options.get_safe("qtmultimedia"):
             self.options.rm_safe("with_libalsa")
-            del self.options.with_openal
-            del self.options.with_gstreamer
-            del self.options.with_pulseaudio
+            self.options.rm_safe("with_openal")
+            self.options.rm_safe("with_gstreamer")
+            self.options.rm_safe("with_pulseaudio")
 
         if self.settings.os in ("FreeBSD", "Linux"):
             if self.options.get_safe("qtwebengine"):
@@ -305,13 +327,13 @@ class QtConan(ConanFile):
 
             if not (self.options.get_safe("gui") and self.options.qtdeclarative and self.options.qtwebchannel):
                 raise ConanInvalidConfiguration("option qt:qtwebengine requires also qt:gui, qt:qtdeclarative and qt:qtwebchannel")
-            if not self.options.with_dbus and self.settings.os == "Linux":
+            if not self.options.get_safe("with_dbus") and self.settings.os == "Linux":
                 raise ConanInvalidConfiguration("option qt:webengine requires also qt:with_dbus on Linux")
 
             if hasattr(self, "settings_build") and cross_building(self, skip_x64_x86=True):
                 raise ConanInvalidConfiguration("Cross compiling Qt WebEngine is not supported")
 
-        if self.options.widgets and not self.options.get_safe("gui"):
+        if self.options.get_safe("widgets") and not self.options.get_safe("gui"):
             raise ConanInvalidConfiguration("using option qt:widgets without option qt:gui is not possible. "
                                             "You can either disable qt:widgets or enable qt:gui")
         if self.settings.os == "Android" and self.options.get_safe("opengl", "no") == "desktop":
@@ -328,10 +350,10 @@ class QtConan(ConanFile):
 
         if self.options.get_safe("with_pulseaudio", False) or self.options.get_safe("with_libalsa", False):
             raise ConanInvalidConfiguration("alsa and pulseaudio are not supported (QTBUG-95116), please disable them.")
-        if not self.options.with_pcre2:
+        if not self.options.get_safe("with_pcre2"):
             raise ConanInvalidConfiguration("pcre2 is actually required by qt (QTBUG-92454). please use option qt:with_pcre2=True")
 
-        if self.settings.os in ['Linux', 'FreeBSD'] and self.options.with_gssapi:
+        if self.settings.os in ['Linux', 'FreeBSD'] and self.options.get_safe("with_gssapi"):
             raise ConanInvalidConfiguration("gssapi cannot be enabled until conan-io/conan-center-index#4102 is closed")
 
         if self.options.get_safe("with_x11", False) and not self.dependencies.direct_host["xkbcommon"].options.with_x11:
@@ -339,7 +361,7 @@ class QtConan(ConanFile):
         if self.options.get_safe("qtwayland", False) and not self.dependencies.direct_host["xkbcommon"].options.with_wayland:
             raise ConanInvalidConfiguration("The 'with_wayland' option for the 'xkbcommon' package must be enabled when the 'qtwayland' option is enabled")
 
-        if self.options.with_sqlite3 and not self.dependencies["sqlite3"].options.enable_column_metadata:
+        if self.options.get_safe("with_sqlite3") and not self.dependencies["sqlite3"].options.enable_column_metadata:
             raise ConanInvalidConfiguration("sqlite3 option enable_column_metadata must be enabled for qt")
 
         if self.options.get_safe("qtspeech") and not self.options.qtdeclarative:
@@ -350,9 +372,9 @@ class QtConan(ConanFile):
 
     def requirements(self):
         self.requires("zlib/[>=1.2.11 <2]")
-        if self.options.openssl:
+        if self.options.get_safe("openssl"):
             self.requires("openssl/[>=1.1 <4]")
-        if self.options.with_pcre2:
+        if self.options.get_safe("with_pcre2"):
             self.requires("pcre2/10.42")
         if self.options.get_safe("with_vulkan"):
             # Note: the versions of vulkan-loader and moltenvk
@@ -363,9 +385,9 @@ class QtConan(ConanFile):
             self.requires("vulkan-headers/1.3.239.0", transitive_headers=True)
             if is_apple_os(self):
                 self.requires("moltenvk/1.2.2")
-        if self.options.with_glib:
+        if self.options.get_safe("with_glib"):
             self.requires("glib/2.78.3")
-        if self.options.with_doubleconversion and not self.options.multiconfiguration:
+        if self.options.get_safe("with_doubleconversion") and not self.options.multiconfiguration:
             self.requires("double-conversion/3.3.0")
         if self.options.get_safe("with_freetype", False) and not self.options.multiconfiguration:
             self.requires("freetype/2.13.2")
@@ -376,26 +398,26 @@ class QtConan(ConanFile):
         if self.options.get_safe("with_harfbuzz", False) and not self.options.multiconfiguration:
             self.requires("harfbuzz/8.3.0")
         if self.options.get_safe("with_libjpeg", False) and not self.options.multiconfiguration:
-            if self.options.with_libjpeg == "libjpeg-turbo":
+            if self.options.get_safe("with_libjpeg") == "libjpeg-turbo":
                 self.requires("libjpeg-turbo/[>=3.0 <3.1]")
             else:
                 self.requires("libjpeg/9e")
         if self.options.get_safe("with_libpng", False) and not self.options.multiconfiguration:
             self.requires("libpng/[>=1.6 <2]")
-        if self.options.with_sqlite3 and not self.options.multiconfiguration:
+        if self.options.get_safe("with_sqlite3") and not self.options.multiconfiguration:
             self.requires("sqlite3/[>=3.45.0 <4]")
         if self.options.get_safe("with_mysql", False):
             self.requires("libmysqlclient/8.1.0")
-        if self.options.with_pq:
+        if self.options.get_safe("with_pq"):
             self.requires("libpq/15.4")
-        if self.options.with_odbc:
+        if self.options.get_safe("with_odbc"):
             if self.settings.os != "Windows":
                 self.requires("odbc/2.3.11")
         if self.options.get_safe("with_openal", False):
             self.requires("openal-soft/1.22.2")
         if self.options.get_safe("with_libalsa", False):
             self.requires("libalsa/1.2.10")
-        if self.options.get_safe("with_x11") or self.options.qtwayland:
+        if self.options.get_safe("with_x11") or self.options.get_safe("qtwayland"):
             self.requires("xkbcommon/1.5.0")
         if self.options.get_safe("with_x11", False):
             self.requires("xorg/system")
@@ -403,11 +425,11 @@ class QtConan(ConanFile):
             self.requires("egl/system")
         if self.settings.os != "Windows" and self.options.get_safe("opengl", "no") != "no":
             self.requires("opengl/system")
-        if self.options.with_zstd:
+        if self.options.get_safe("with_zstd"):
             self.requires("zstd/1.5.5")
-        if self.options.qtwayland:
+        if self.options.get_safe("qtwayland"):
             self.requires("wayland/1.22.0")
-        if self.options.with_brotli:
+        if self.options.get_safe("with_brotli"):
             self.requires("brotli/1.1.0")
         if self.options.get_safe("qtwebengine") and self.settings.os == "Linux":
             self.requires("expat/[>=2.6.2 <3]")
@@ -421,7 +443,7 @@ class QtConan(ConanFile):
             self.requires("gst-plugins-base/1.19.2")
         if self.options.get_safe("with_pulseaudio", False):
             self.requires("pulseaudio/14.2")
-        if self.options.with_dbus:
+        if self.options.get_safe("with_dbus"):
             self.requires("dbus/1.15.8")
         if self.settings.os in ['Linux', 'FreeBSD'] and self.options.with_gssapi:
             self.requires("krb5/1.18.3") # conan-io/conan-center-index#4102
@@ -444,7 +466,7 @@ class QtConan(ConanFile):
                 self.tool_requires("bison/3.8.2")
                 self.tool_requires("flex/2.6.4")
 
-        if self.options.qtwayland:
+        if self.options.get_safe("qtwayland"):
             self.tool_requires("wayland/1.22.0")
         if cross_building(self):
             self.tool_requires(str(self.ref))
@@ -528,7 +550,7 @@ class QtConan(ConanFile):
         tc.variables["INPUT_opengl"] = self.options.get_safe("opengl", "no")
 
         # openSSL
-        if not self.options.openssl:
+        if not self.options.get_safe("openssl"):
             tc.variables["INPUT_openssl"] = "no"
         else:
             tc.variables["HAVE_openssl"] = "ON"
@@ -543,13 +565,13 @@ class QtConan(ConanFile):
         # Required for qt_config_compile_test() calls against CMakeDeps targets to work correctly.
         tc.cache_variables["CMAKE_TRY_COMPILE_CONFIGURATION"] = str(self.settings.build_type)
 
-        if self.options.with_dbus:
+        if self.options.get_safe("with_dbus"):
             tc.variables["INPUT_dbus"] = "linked"
         else:
             tc.variables["FEATURE_dbus"] = "OFF"
         tc.variables["CMAKE_FIND_DEBUG_MODE"] = "FALSE"
 
-        if not self.options.with_zstd:
+        if not self.options.get_safe("with_zstd"):
             tc.variables["CMAKE_DISABLE_FIND_PACKAGE_WrapZSTD"] = "ON"
 
         if not self.options.get_safe("with_vulkan"):
@@ -879,11 +901,11 @@ class QtConan(ConanFile):
         if self.settings.os == "Macos":
             filecontents += 'set(__qt_internal_cmake_apple_support_files_path "${CMAKE_CURRENT_LIST_DIR}/../../../lib/cmake/Qt6/macos")\n'
         targets = ["moc", "qlalr", "rcc", "tracegen", "cmake_automoc_parser", "qmake", "qtpaths", "syncqt", "tracepointgen"]
-        if self.options.with_dbus:
+        if self.options.get_safe("with_dbus"):
             targets.extend(["qdbuscpp2xml", "qdbusxml2cpp"])
         if self.options.get_safe("gui"):
             targets.append("qvkgen")
-        if self.options.widgets:
+        if self.options.get_safe("widgets"):
             targets.append("uic")
         if self.settings_build.os == "Macos" and self.settings.os != "iOS":
             targets.extend(["macdeployqt"])
@@ -954,7 +976,7 @@ class QtConan(ConanFile):
         if self.options.get_safe("gui"):
             _create_private_module("Gui", ["CorePrivate", "Gui"])
 
-        if self.options.widgets:
+        if self.options.get_safe("widgets"):
             _create_private_module("Widgets", ["CorePrivate", "GuiPrivate", "Widgets"])
 
         if self.options.qtdeclarative:
@@ -1044,17 +1066,17 @@ class QtConan(ConanFile):
             self.cpp_info.components[componentname].requires = _get_corrected_reqs(requires)
 
         core_reqs = ["zlib::zlib"]
-        if self.options.with_pcre2:
+        if self.options.get_safe("with_pcre2"):
             core_reqs.append("pcre2::pcre2")
-        if self.options.with_doubleconversion:
+        if self.options.get_safe("with_doubleconversion"):
             core_reqs.append("double-conversion::double-conversion")
         if self.options.get_safe("with_icu", False):
             core_reqs.append("icu::icu")
-        if self.options.with_zstd:
+        if self.options.get_safe("with_zstd"):
             core_reqs.append("zstd::zstd")
-        if self.options.with_glib:
+        if self.options.get_safe("with_glib"):
             core_reqs.append("glib::glib")
-        if self.options.openssl:
+        if self.options.get_safe("openssl"):
             core_reqs.append("openssl::openssl") # used by QCryptographicHash
 
         _create_module("Core", core_reqs)
@@ -1076,7 +1098,7 @@ class QtConan(ConanFile):
             self.cpp_info.components["qtCore"].system_libs.append("runtimeobject")
         self.cpp_info.components["qtPlatform"].set_property("cmake_target_name", "Qt6::Platform")
         self.cpp_info.components["qtPlatform"].includedirs = [os.path.join("mkspecs", self._xplatform())]
-        if self.options.with_dbus:
+        if self.options.get_safe("with_dbus"):
             _create_module("DBus", ["dbus::dbus"])
             if self.settings.os == "Windows":
                 # https://github.com/qt/qtbase/blob/v6.6.1/src/dbus/CMakeLists.txt#L71-L77
@@ -1086,16 +1108,16 @@ class QtConan(ConanFile):
                 self.cpp_info.components["qtDBus"].system_libs.append("ws2_32")
         if self.options.get_safe("gui"):
             gui_reqs = []
-            if self.options.with_dbus:
+            if self.options.get_safe("with_dbus"):
                 gui_reqs.append("DBus")
-            if self.options.with_freetype:
+            if self.options.get_safe("with_freetype"):
                 gui_reqs.append("freetype::freetype")
-            if self.options.with_libpng:
+            if self.options.get_safe("with_libpng"):
                 gui_reqs.append("libpng::libpng")
             if self.options.get_safe("with_fontconfig", False):
                 gui_reqs.append("fontconfig::fontconfig")
             if self.settings.os in ["Linux", "FreeBSD"]:
-                if self.options.qtwayland or self.options.get_safe("with_x11", False):
+                if self.options.get_safe("qtwayland") or self.options.get_safe("with_x11", False):
                     gui_reqs.append("xkbcommon::xkbcommon")
                 if self.options.get_safe("with_x11", False):
                     gui_reqs.append("xorg::xorg")
@@ -1108,11 +1130,11 @@ class QtConan(ConanFile):
                 gui_reqs.append("vulkan-headers::vulkan-headers")
                 if is_apple_os(self):
                     gui_reqs.append("moltenvk::moltenvk")
-            if self.options.with_harfbuzz:
+            if self.options.get_safe("with_harfbuzz"):
                 gui_reqs.append("harfbuzz::harfbuzz")
-            if self.options.with_glib:
+            if self.options.get_safe("with_glib"):
                 gui_reqs.append("glib::glib")
-            if self.options.with_md4c:
+            if self.options.get_safe("with_md4c"):
                 gui_reqs.append("md4c::md4c")
             _create_module("Gui", gui_reqs)
 
@@ -1212,27 +1234,27 @@ class QtConan(ConanFile):
                     jpeg_reqs.append("libjpeg::libjpeg")
                 _create_plugin("QJpegPlugin", "qjpeg", "imageformats", jpeg_reqs)
 
-        if self.options.with_sqlite3:
+        if self.options.get_safe("with_sqlite3"):
             _create_plugin("QSQLiteDriverPlugin", "qsqlite", "sqldrivers", ["sqlite3::sqlite3"])
-        if self.options.with_pq:
+        if self.options.get_safe("with_pq"):
             _create_plugin("QPSQLDriverPlugin", "qsqlpsql", "sqldrivers", ["libpq::libpq"])
-        if self.options.with_odbc:
+        if self.options.get_safe("with_odbc"):
             _create_plugin("QODBCDriverPlugin", "qsqlodbc", "sqldrivers", [])
             if self.settings.os != "Windows":
                 self.cpp_info.components["QODBCDriverPlugin"].requires.append("odbc::odbc")
             else:
                 self.cpp_info.components["QODBCDriverPlugin"].system_libs.append("odbc32")
         networkReqs = []
-        if self.options.openssl:
+        if self.options.get_safe("openssl"):
             networkReqs.append("openssl::openssl")
-        if self.options.with_brotli:
+        if self.options.get_safe("with_brotli"):
             networkReqs.append("brotli::brotli")
         if self.settings.os in ['Linux', 'FreeBSD'] and self.options.with_gssapi:
             networkReqs.append("krb5::krb5-gssapi")
         _create_module("Network", networkReqs)
         _create_module("Sql", [])
         _create_module("Test", [])
-        if self.options.widgets:
+        if self.options.get_safe("widgets"):
             _create_module("Widgets", ["Gui"])
             _add_build_module("qtWidgets", self._cmake_qt6_private_file("Widgets"))
             if self.settings.os == "Windows":
@@ -1240,11 +1262,11 @@ class QtConan(ConanFile):
                 self.cpp_info.components["qtWidgets"].system_libs += [
                     "dwmapi", "shell32", "uxtheme",
                 ]
-        if self.options.get_safe("gui") and self.options.widgets:
+        if self.options.get_safe("gui") and self.options.get_safe("widgets"):
             _create_module("PrintSupport", ["Gui", "Widgets"])
         if self.options.get_safe("opengl", "no") != "no" and self.options.get_safe("gui"):
             _create_module("OpenGL", ["Gui"])
-        if self.options.widgets and self.options.get_safe("opengl", "no") != "no":
+        if self.options.get_safe("widgets") and self.options.get_safe("opengl", "no") != "no":
             _create_module("OpenGLWidgets", ["OpenGL", "Widgets"])
         _create_module("Concurrent", [])
         _create_module("Xml", [])
@@ -1264,13 +1286,13 @@ class QtConan(ConanFile):
             if qt_quick_enabled:
                 _create_module("Quick", ["Gui", "Qml", "QmlModels"])
                 _add_build_module("qtQuick", self._cmake_qt6_private_file("Quick"))
-                if self.options.widgets:
+                if self.options.get_safe("widgets"):
                     _create_module("QuickWidgets", ["Gui", "Qml", "Quick", "Widgets"])
                 _create_module("QuickShapes", ["Gui", "Qml", "Quick"])
                 _create_module("QuickTest", ["Test", "Quick"])
             _create_module("QmlWorkerScript", ["Qml"])
 
-        if self.options.qttools and self.options.get_safe("gui") and self.options.widgets:
+        if self.options.qttools and self.options.get_safe("gui") and self.options.get_safe("widgets"):
             self.cpp_info.components["qtLinguistTools"].set_property("cmake_target_name", "Qt6::LinguistTools")
             _create_module("UiPlugin", ["Gui", "Widgets"])
             self.cpp_info.components["qtUiPlugin"].libs = [] # this is a collection of abstract classes, so this is header-only
@@ -1296,10 +1318,10 @@ class QtConan(ConanFile):
             _create_module("Svg", ["Gui"])
             _create_plugin("QSvgIconPlugin", "qsvgicon", "iconengines", [])
             _create_plugin("QSvgPlugin", "qsvg", "imageformats", [])
-            if self.options.widgets:
+            if self.options.get_safe("widgets"):
                 _create_module("SvgWidgets", ["Gui", "Svg", "Widgets"])
 
-        if self.options.qtwayland and self.options.get_safe("gui"):
+        if self.options.get_safe("qtwayland") and self.options.get_safe("gui"):
             _create_module("WaylandClient", ["Gui", "wayland::wayland-client"])
             _create_module("WaylandCompositor", ["Gui", "wayland::wayland-server"])
 
@@ -1371,7 +1393,7 @@ class QtConan(ConanFile):
             multimedia_reqs = ["Network", "Gui"]
             if self.options.get_safe("with_libalsa", False):
                 multimedia_reqs.append("libalsa::libalsa")
-            if self.options.with_openal:
+            if self.options.get_safe("with_openal"):
                 multimedia_reqs.append("openal-soft::openal-soft")
             if self.options.get_safe("with_pulseaudio", False):
                 multimedia_reqs.append("pulseaudio::pulse")
@@ -1457,7 +1479,7 @@ class QtConan(ConanFile):
             # _create_plugin("dummySensorPlugin", "qtsensors_dummy", "sensors", ["Sensors"])
 
             # https://github.com/qt/qtsensors/tree/dev/src/plugins/sensors/iio-sensor-proxy
-            if self.options.with_dbus and self.settings.os in ["Linux", "FreeBSD"]:
+            if self.options.get_safe("with_dbus") and self.settings.os in ["Linux", "FreeBSD"]:
                 _create_plugin("IIOSensorProxySensorPlugin", "qtsensors_iio-sensor-proxy", "sensors", ["Sensors", "DBus"])
 
             # https://github.com/qt/qtsensors/blob/dev/src/plugins/sensors/android/CMakeLists.txt
@@ -1601,7 +1623,7 @@ class QtConan(ConanFile):
                 if self.options.with_gssapi:
                     # https://github.com/qt/qtbase/blob/v6.6.1/src/network/CMakeLists.txt#L250C56-L253
                     self.cpp_info.components["qtNetwork"].frameworks.append("GSS")
-                if self.options.get_safe("gui") and self.options.widgets:
+                if self.options.get_safe("gui") and self.options.get_safe("widgets"):
                     # https://github.com/qt/qtbase/blob/v6.6.1/src/printsupport/CMakeLists.txt#L52-L63
                     self.cpp_info.components["qtPrintSupport"].system_libs.append("cups")
                     self.cpp_info.components["qtPrintSupport"].frameworks.append("ApplicationServices")
