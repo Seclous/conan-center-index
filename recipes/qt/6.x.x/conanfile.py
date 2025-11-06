@@ -665,15 +665,15 @@ class QtConan(ConanFile):
         tc.variables["QT_USE_VCPKG"] = False
         tc.cache_variables["QT_USE_VCPKG"] = False
         
-        # 1) Prefer Module mode over Config mode, so CMake will use FindFFmpeg.cmake
-        tc.cache_variables["CMAKE_FIND_PACKAGE_PREFER_CONFIG"] = False
-
-        # 2) Ensure CMake can see Qt's FindFFmpeg.cmake
-        extra_modules = [
-            os.path.join(self.source_folder, "qtmultimedia", "cmake"),
-            os.path.join(self.source_folder, "qtbase", "cmake", "3rdparty", "extra-cmake-modules", "find-modules"),
-        ]
-        tc.cache_variables["CMAKE_MODULE_PATH"] = ";".join(extra_modules)        
+        # # 1) Prefer Module mode over Config mode, so CMake will use FindFFmpeg.cmake
+        # tc.cache_variables["CMAKE_FIND_PACKAGE_PREFER_CONFIG"] = False
+        #
+        # # 2) Ensure CMake can see Qt's FindFFmpeg.cmake
+        # extra_modules = [
+        #     os.path.join(self.source_folder, "qtmultimedia", "cmake"),
+        #     os.path.join(self.source_folder, "qtbase", "cmake", "3rdparty", "extra-cmake-modules", "find-modules"),
+        # ]
+        # tc.cache_variables["CMAKE_MODULE_PATH"] = ";".join(extra_modules)
         
         tc.generate()
         
