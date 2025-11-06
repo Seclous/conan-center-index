@@ -62,6 +62,7 @@ class QtConan(ConanFile):
         "with_libalsa": [True, False],
         "with_openal": [True, False],
         "with_gstreamer": [True, False],
+        "with_ffmpeg": [True, False],
         "with_pulseaudio": [True, False],
         "with_gssapi": [True, False],
         "with_md4c": [True, False],
@@ -107,6 +108,7 @@ class QtConan(ConanFile):
         "with_libalsa": False,
         "with_openal": True,
         "with_gstreamer": False,
+        "with_ffmpeg": False,
         "with_pulseaudio": False,
         "with_gssapi": False,
         "with_md4c": True,
@@ -248,6 +250,7 @@ class QtConan(ConanFile):
             self.options.rm_safe("with_libalsa")
             del self.options.with_openal
             del self.options.with_gstreamer
+            del self.options.with_ffmpeg
             del self.options.with_pulseaudio
 
         if self.settings.os in ("FreeBSD", "Linux"):
@@ -319,8 +322,6 @@ class QtConan(ConanFile):
         if "MT" in self.settings.get_safe("compiler.runtime", default="") and self.options.shared:
             raise ConanInvalidConfiguration("Qt cannot be built as shared library with static runtime")
 
-        if self.options.get_safe("with_pulseaudio", False) or self.options.get_safe("with_libalsa", False):
-            raise ConanInvalidConfiguration("alsa and pulseaudio are not supported (QTBUG-95116), please disable them.")
         if not self.options.with_pcre2:
             raise ConanInvalidConfiguration("pcre2 is actually required by qt (QTBUG-92454). please use option qt:with_pcre2=True")
 
@@ -412,6 +413,8 @@ class QtConan(ConanFile):
         if self.options.get_safe("with_gstreamer", False):
             self.requires("gstreamer/1.19.2")
             self.requires("gst-plugins-base/1.19.2")
+        if self.options.get_safe("with_ffmpeg", False):
+            self.requires("ffmpeg/[>=7.1.1 <8]")
         if self.options.get_safe("with_pulseaudio", False):
             self.requires("pulseaudio/14.2")
         if self.options.with_dbus:
@@ -463,6 +466,10 @@ class QtConan(ConanFile):
         # don't override https://github.com/qt/qtmultimedia/blob/dev/cmake/FindGStreamer.cmake
         tc.set_property("gstreamer", "cmake_file_name", "gstreamer_conan")
         tc.set_property("gstreamer", "cmake_find_mode", "module")
+
+        # don't override https://github.com/qt/qtmultimedia/blob/dev/cmake/FindFFmpeg.cmake
+        tc.set_property("ffmpeg", "cmake_file_name", "ffmpeg_conan")
+        tc.set_property("ffmpeg", "cmake_find_mode", "module")
 
         tc.generate()
 
@@ -566,7 +573,8 @@ class QtConan(ConanFile):
                               ("with_brotli", "brotli"),
                               ("with_gssapi", "gssapi"),
                               ("with_egl", "egl"),
-                              ("with_gstreamer", "gstreamer")]:
+                              ("with_gstreamer", "gstreamer"),
+                              ("with_ffmpeg", "ffmpeg")]:
             tc.variables[f"FEATURE_{conf_arg}"] = ("ON" if self.options.get_safe(opt, False) else "OFF")
 
 
@@ -1376,6 +1384,17 @@ class QtConan(ConanFile):
                 _create_plugin("QGstreamerMediaPlugin", "gstreamermediaplugin", "multimedia", [
                     "gstreamer::gstreamer",
                     "gst-plugins-base::gst-plugins-base"])
+            if self.options.with_ffmpeg:
+                # https://github.com/qt/qtmultimedia/blob/dev/src/plugins/multimedia/ffmpeg/CMakeLists.txt
+                # TODO: ffmpeg plugin private also links to bunch of system libs
+                _create_plugin("QFFmpegMediaPlugin", "ffmpegmediaplugin", "multimedia", [
+                    "Multimedia",
+                    "ffmpeg::avcodec",
+                    "ffmpeg::avformat",
+                    "ffmpeg::avutil",
+                    "ffmpeg::swresample",
+                    "ffmpeg::swscale"
+                ])
 
             if self.settings.os == "Windows":
                 _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Multimedia"
