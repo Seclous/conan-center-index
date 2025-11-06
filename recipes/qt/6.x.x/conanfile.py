@@ -668,7 +668,7 @@ class QtConan(ConanFile):
         # 1) Prefer Module mode over Config mode, so CMake will use FindFFmpeg.cmake
         tc.cache_variables["CMAKE_FIND_PACKAGE_PREFER_CONFIG"] = False
 
-        # 2) Ensure CMake can see Qt’s FindFFmpeg.cmake
+        # 2) Ensure CMake can see Qt's FindFFmpeg.cmake
         extra_modules = [
             os.path.join(self.source_folder, "qtmultimedia", "cmake"),
             os.path.join(self.source_folder, "qtbase", "cmake", "3rdparty", "extra-cmake-modules", "find-modules"),
@@ -843,21 +843,6 @@ class QtConan(ConanFile):
             'FFmpeg_FOUND'
         )      
 
-        # Make pkg-config see Conan’s generator dir + the ffmpeg package’s pc files
-        os.environ["PKG_CONFIG_PATH"] = f"{self.generators_folder}:{os.environ.get('PKG_CONFIG_PATH','')}"
-        ffpkg = self.dependencies.get("ffmpeg")
-        if ffpkg:
-            ff_pc = os.path.join(ffpkg.package_folder, "lib", "pkgconfig")
-            os.environ["PKG_CONFIG_PATH"] = f"{ff_pc}:{os.environ['PKG_CONFIG_PATH']}"
-
-        # sanity print (keep)
-        for mod in ("libavformat","libavcodec","libavutil","libswresample","libswscale"):
-            try:
-                v = subprocess.check_output(["pkg-config","--modversion",mod], text=True).strip()
-                print(f"pkg-config: {mod} = {v}")
-            except subprocess.CalledProcessError as e:
-                print(f"pkg-config: {mod} NOT FOUND"); print(e.output)
-        
         cmake.configure()
         cmake.build()
 
