@@ -1,9 +1,9 @@
 import configparser
 import glob
-import os, subprocess
+import os
+import re
 import platform
 import textwrap
-
 from conan import ConanFile
 from conan.tools.apple import is_apple_os
 from conan.tools.build import cross_building, check_min_cppstd, default_cppstd
@@ -14,36 +14,9 @@ from conan.tools.gnu import PkgConfigDeps
 from conan.tools.microsoft import msvc_runtime_flag, is_msvc
 from conan.tools.scm import Version
 from conan.errors import ConanException, ConanInvalidConfiguration
+from pathlib import Path
 
 required_conan_version = ">=2.0"
-
-_FFMPEG_ALIAS_SHIM = r"""
-# Ensure config packages win over modules
-set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
-
-# Ask for common Qt Multimedia components (add more if your build needs them)
-find_package(ffmpeg CONFIG REQUIRED
-    COMPONENTS avformat avcodec avutil swresample swscale
-)
-
-function(_ffmpeg_alias one)
-    if(TARGET ffmpeg::${one} AND NOT TARGET FFmpeg::${one})
-        add_library(FFmpeg::${one} INTERFACE IMPORTED)
-        set_property(TARGET FFmpeg::${one} PROPERTY
-            INTERFACE_LINK_LIBRARIES ffmpeg::${one})
-    endif()
-endfunction()
-
-_ffmpeg_alias(avformat)
-_ffmpeg_alias(avcodec)
-_ffmpeg_alias(avutil)
-_ffmpeg_alias(swresample)
-_ffmpeg_alias(swscale)
-# Add if needed later:
-# _ffmpeg_alias(avdevice)
-# _ffmpeg_alias(avfilter)
-# _ffmpeg_alias(postproc)
-"""
 
 class QtConan(ConanFile):
     _submodules = ["qtsvg", "qtdeclarative", "qttools", "qttranslations", "qtdoc",
@@ -182,7 +155,7 @@ class QtConan(ConanFile):
                     raise ConanException(f"module {modulename} has status {status} which is not in self._module_statuses {self._module_statuses}")
                 assert modulename in self._submodules, f"module {modulename} not in self._submodules"
                 self._submodules_tree[modulename] = {"status": status,
-                                "path": str(config.get(section, "path")), "depends": []}
+                                                     "path": str(config.get(section, "path")), "depends": []}
                 if config.has_option(section, "depends"):
                     self._submodules_tree[modulename]["depends"] = [str(i) for i in config.get(section, "depends").split()]
 
@@ -276,9 +249,9 @@ class QtConan(ConanFile):
 
         if not self.options.get_safe("qtmultimedia"):
             self.options.rm_safe("with_libalsa")
-            self.options.rm_safe("with_ffmpeg")
             del self.options.with_openal
             del self.options.with_gstreamer
+            del self.options.with_ffmpeg
             del self.options.with_pulseaudio
 
         if self.settings.os in ("FreeBSD", "Linux"):
@@ -350,8 +323,6 @@ class QtConan(ConanFile):
         if "MT" in self.settings.get_safe("compiler.runtime", default="") and self.options.shared:
             raise ConanInvalidConfiguration("Qt cannot be built as shared library with static runtime")
 
-#        if self.options.get_safe("with_pulseaudio", False) or self.options.get_safe("with_libalsa", False):
-#            raise ConanInvalidConfiguration("alsa and pulseaudio are not supported (QTBUG-95116), please disable them.")
         if not self.options.with_pcre2:
             raise ConanInvalidConfiguration("pcre2 is actually required by qt (QTBUG-92454). please use option qt:with_pcre2=True")
 
@@ -444,7 +415,7 @@ class QtConan(ConanFile):
             self.requires("gstreamer/1.19.2")
             self.requires("gst-plugins-base/1.19.2")
         if self.options.get_safe("with_ffmpeg", False):
-            self.requires("ffmpeg/[>=7.1.1 <8]@seclous/patch")
+            self.requires("ffmpeg/[>=7.1.1 <8]")
         if self.options.get_safe("with_pulseaudio", False):
             self.requires("pulseaudio/14.2")
         if self.options.with_dbus:
@@ -496,13 +467,17 @@ class QtConan(ConanFile):
         # don't override https://github.com/qt/qtmultimedia/blob/dev/cmake/FindGStreamer.cmake
         tc.set_property("gstreamer", "cmake_file_name", "gstreamer_conan")
         tc.set_property("gstreamer", "cmake_find_mode", "module")
-        
+
+        # don't override https://github.com/qt/qtmultimedia/blob/dev/cmake/FindFFmpeg.cmake
+        tc.set_property("ffmpeg", "cmake_file_name", "ffmpeg_conan")
+        tc.set_property("ffmpeg", "cmake_find_mode", "module")
+
         tc.generate()
 
         for f in glob.glob("*.cmake"):
             replace_in_file(self, f,
-                " IMPORTED)\n",
-                " IMPORTED GLOBAL)\n", strict=False)
+                            " IMPORTED)\n",
+                            " IMPORTED GLOBAL)\n", strict=False)
 
         pc = PkgConfigDeps(self)
         pc.generate()
@@ -599,18 +574,19 @@ class QtConan(ConanFile):
                               ("with_brotli", "brotli"),
                               ("with_gssapi", "gssapi"),
                               ("with_egl", "egl"),
-                              ("with_gstreamer", "gstreamer")]:
+                              ("with_gstreamer", "gstreamer"),
+                              ("with_ffmpeg", "ffmpeg")]:
             tc.variables[f"FEATURE_{conf_arg}"] = ("ON" if self.options.get_safe(opt, False) else "OFF")
 
 
         for opt, conf_arg in [
-                              ("with_doubleconversion", "doubleconversion"),
-                              ("with_freetype", "freetype"),
-                              ("with_harfbuzz", "harfbuzz"),
-                              ("with_libjpeg", "jpeg"),
-                              ("with_libpng", "png"),
-                              ("with_sqlite3", "sqlite"),
-                              ("with_pcre2", "pcre2"),]:
+            ("with_doubleconversion", "doubleconversion"),
+            ("with_freetype", "freetype"),
+            ("with_harfbuzz", "harfbuzz"),
+            ("with_libjpeg", "jpeg"),
+            ("with_libpng", "png"),
+            ("with_sqlite3", "sqlite"),
+            ("with_pcre2", "pcre2"),]:
             if self.options.get_safe(opt, False):
                 if self.options.multiconfiguration:
                     tc.variables[f"FEATURE_{conf_arg}"] = "ON"
@@ -621,13 +597,13 @@ class QtConan(ConanFile):
                 tc.variables[f"FEATURE_system_{conf_arg}"] = "OFF"
 
         for opt, conf_arg in [
-                              ("with_doubleconversion", "doubleconversion"),
-                              ("with_freetype", "freetype"),
-                              ("with_harfbuzz", "harfbuzz"),
-                              ("with_libjpeg", "libjpeg"),
-                              ("with_libpng", "libpng"),
-                              ("with_md4c", "libmd4c"),
-                              ("with_pcre2", "pcre"),]:
+            ("with_doubleconversion", "doubleconversion"),
+            ("with_freetype", "freetype"),
+            ("with_harfbuzz", "harfbuzz"),
+            ("with_libjpeg", "libjpeg"),
+            ("with_libpng", "libpng"),
+            ("with_md4c", "libmd4c"),
+            ("with_pcre2", "pcre"),]:
             if self.options.get_safe(opt, False):
                 if self.options.multiconfiguration:
                     tc.variables[f"INPUT_{conf_arg}"] = "qt"
@@ -673,9 +649,9 @@ class QtConan(ConanFile):
         if self.settings.compiler == "gcc" and self.settings.build_type == "Debug" and not self.options.shared:
             tc.variables["BUILD_WITH_PCH"] = "OFF"  # disabling PCH to save disk space
 
-                               #"set(QT_EXTRA_INCLUDEPATHS ${CONAN_INCLUDE_DIRS})\n"
-                               #"set(QT_EXTRA_DEFINES ${CONAN_DEFINES})\n"
-                               #"set(QT_EXTRA_LIBDIRS ${CONAN_LIB_DIRS})\n"
+            #"set(QT_EXTRA_INCLUDEPATHS ${CONAN_INCLUDE_DIRS})\n"
+            #"set(QT_EXTRA_DEFINES ${CONAN_DEFINES})\n"
+            #"set(QT_EXTRA_LIBDIRS ${CONAN_LIB_DIRS})\n"
 
         current_cpp_std = self.settings.get_safe("compiler.cppstd", default_cppstd(self))
         current_cpp_std = str(current_cpp_std).replace("gnu", "")
@@ -693,24 +669,11 @@ class QtConan(ConanFile):
         tc.variables["QT_USE_VCPKG"] = False
         tc.cache_variables["QT_USE_VCPKG"] = False
 
-        # Prefer package configs over modules (bypass Qt's FindFFmpeg.cmake)
-        tc.cache_variables["CMAKE_FIND_PACKAGE_PREFER_CONFIG"] = "ON"
-
-        tc.cache_variables["FFmpeg_DIR"] = self.generators_folder
-
-        # Create a alias shim so Qt's uppercase targets exist.
-        if self.options.with_ffmpeg:
-            alias_dir = os.path.join(self.build_folder, "cmake")
-            os.makedirs(alias_dir, exist_ok=True)
-            alias_path = os.path.join(alias_dir, "FFmpegAliases.cmake")
-            save(self, alias_path, _FFMPEG_ALIAS_SHIM)
-
-            # Make CMake include it *very early*
-            tc.cache_variables["CMAKE_PROJECT_TOP_LEVEL_INCLUDES"] = alias_path
+        # hard-disable the WebP plugin regardless of what packages are present, it clashes with ffmpeg's webp use.
+        tc.cache_variables["FEATURE_webp"] = "OFF"
+        tc.cache_variables["QT_FEATURE_webp"] = "OFF"
 
         tc.generate()
-        
-        
 
     def package_id(self):
         del self.info.options.cross_compile
@@ -730,15 +693,15 @@ class QtConan(ConanFile):
             # Don't use os.path.join, or it removes the \\?\ prefix, which enables long paths
             destination = rf"\\?\{self.source_folder}"
         get(self, **self.conan_data["sources"][self.version],
-                  strip_root=True, destination=destination)
+            strip_root=True, destination=destination)
 
         # patching in source method because of no_copy_source attribute
         apply_conandata_patches(self)
         for f in ["renderer", os.path.join("renderer", "core"), os.path.join("renderer", "platform")]:
             replace_in_file(self, os.path.join(self.source_folder, "qtwebengine", "src", "3rdparty", "chromium", "third_party", "blink", f, "BUILD.gn"),
-                                  "  if (enable_precompiled_headers) {\n    if (is_win) {",
-                                  "  if (enable_precompiled_headers) {\n    if (false) {"
-                                  )
+                            "  if (enable_precompiled_headers) {\n    if (is_win) {",
+                            "  if (enable_precompiled_headers) {\n    if (false) {"
+                            )
 
         for f in ["FindPostgreSQL.cmake"]:
             file = os.path.join(self.source_folder, "qtbase", "cmake", f)
@@ -748,8 +711,8 @@ class QtConan(ConanFile):
         # workaround QTBUG-94356
         replace_in_file(self, os.path.join(self.source_folder, "qtbase", "cmake", "FindWrapSystemZLIB.cmake"), '"-lz"', 'ZLIB::ZLIB')
         replace_in_file(self, os.path.join(self.source_folder, "qtbase", "configure.cmake"),
-            "set_property(TARGET ZLIB::ZLIB PROPERTY IMPORTED_GLOBAL TRUE)",
-            "")
+                        "set_property(TARGET ZLIB::ZLIB PROPERTY IMPORTED_GLOBAL TRUE)",
+                        "")
 
         replace_in_file(self,
                         os.path.join(self.source_folder, "qtbase", "cmake", "QtAutoDetect.cmake" if Version(self.version) < "6.6.2" else "QtAutoDetectHelpers.cmake"),
@@ -758,10 +721,10 @@ class QtConan(ConanFile):
 
         # Handle locating moltenvk headers when vulkan is enabled on macOS
         replace_in_file(self, os.path.join(self.source_folder, "qtbase", "cmake", "FindWrapVulkanHeaders.cmake"),
-        "if(APPLE)", "if(APPLE)\n"
-                    " find_package(moltenvk REQUIRED QUIET)\n"
-                    " target_include_directories(WrapVulkanHeaders::WrapVulkanHeaders INTERFACE ${moltenvk_INCLUDE_DIR})"
-        )
+                        "if(APPLE)", "if(APPLE)\n"
+                                     " find_package(moltenvk REQUIRED QUIET)\n"
+                                     " target_include_directories(WrapVulkanHeaders::WrapVulkanHeaders INTERFACE ${moltenvk_INCLUDE_DIR})"
+                        )
 
     def _xplatform(self):
         if self.settings.os == "Linux":
@@ -866,7 +829,7 @@ class QtConan(ConanFile):
             save(self, ".qmake.stash", "")
             save(self, ".qmake.super", "")
         cmake = CMake(self)
-        
+
         # Patch out the pulseaudio requirement on linux - note, that this will leave ffmpeg unable to deal with audio.
         # Attempts to get pulseaudio to build failed so far.
         qtbi = os.path.join(self.source_folder, "qtmultimedia", "src", "multimedia", "configure.cmake")
@@ -874,7 +837,7 @@ class QtConan(ConanFile):
             self, qtbi,
             'FFmpeg_FOUND AND (APPLE OR WIN32 OR ANDROID OR QNX OR QT_FEATURE_pulseaudio)',
             'FFmpeg_FOUND'
-        )      
+        )
 
         cmake.configure()
         cmake.build()
@@ -1032,6 +995,9 @@ class QtConan(ConanFile):
                     APPEND PROPERTY INTERFACE_LINK_LIBRARIES "$<${entrypoint_conditions}:${QT_CMAKE_EXPORT_NAMESPACE}::EntryPointPrivate>"
                 )""")
             save(self, os.path.join(self.package_folder, self._cmake_entry_point_file), contents)
+
+
+
 
     def package_info(self):
         self.cpp_info.set_property("cmake_file_name", "Qt6")
@@ -1436,15 +1402,17 @@ class QtConan(ConanFile):
                 _create_plugin("QGstreamerMediaPlugin", "gstreamermediaplugin", "multimedia", [
                     "gstreamer::gstreamer",
                     "gst-plugins-base::gst-plugins-base"])
-            elif self.options.get_safe("with_ffmpeg"):
+            if self.options.with_ffmpeg:
+                # https://github.com/qt/qtmultimedia/blob/dev/src/plugins/multimedia/ffmpeg/CMakeLists.txt
+                # TODO: ffmpeg plugin private also links to bunch of system libs
                 _create_plugin("QFFmpegMediaPlugin", "ffmpegmediaplugin", "multimedia", [
                     "Multimedia",
-                    "FFmpeg::avcodec",
-                    "FFmpeg::avformat",
-                    "FFmpeg::avutil",
-                    "FFmpeg::swresample",
-                    "FFmpeg::swscale"
-                    ])
+                    "ffmpeg::avcodec",
+                    "ffmpeg::avformat",
+                    "ffmpeg::avutil",
+                    "ffmpeg::swresample",
+                    "ffmpeg::swscale"
+                ])
 
             if self.settings.os == "Windows":
                 _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Multimedia"
@@ -1747,3 +1715,47 @@ class QtConan(ConanFile):
         self.cpp_info.set_property("cmake_build_modules", build_modules_list)
 
         self.conf_info.define("user.qt:tools_directory", os.path.join(self.package_folder, "bin" if self.settings.os == "Windows" else "libexec"))
+
+        self.prune_missing_libs()
+
+
+
+    # Remove components, that are missing libs. This appears to happen, when webp is disabled.
+    # Expect the following output: [qt] Pruning missing libs from 'qtQWebpPlugin': qwebp
+    def prune_missing_libs(self):
+        pkgroot = Path(self.package_folder)
+        present = set()
+
+        def file_variants(fname: str):
+            s = fname.lower()
+            s = re.sub(r'\.(a|so(\.\d+)*)$', '', s)  # strip shared/static suffix + version
+            # account for the quirky Linux lib prefixing.
+            if s.startswith("lib"):
+                s = s[3:]  # strip Unix "lib" prefix
+            # tolerate debug-suffix (Windows debug naming)
+            return {s, s[:-1]} if s.endswith("d") else {s, s + "d"}
+
+        for pat in ("*.lib", "*.a", "*.so", "*.so.*", "*.dylib"):
+            for p in pkgroot.rglob(pat):
+                present |= file_variants(p.name)
+
+        for comp_name, comp in self.cpp_info.components.items():
+            libs = getattr(comp, "libs", None)
+            if not libs:
+                continue
+
+            keep, missing = [], []
+            for l in libs:
+                ll = l.lower()
+                exists = ll in present
+                if not exists and ll.endswith("d"):
+                    exists = ll[:-1] in present  # match base↔debug
+                (keep if exists else missing).append(l)
+
+            if missing:
+                self.output.warning(
+                    f"[qt] Pruning missing libs from '{comp_name}': {', '.join(missing)}"
+                )
+
+            comp.libs = keep
+
