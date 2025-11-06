@@ -17,6 +17,34 @@ from conan.errors import ConanException, ConanInvalidConfiguration
 
 required_conan_version = ">=2.0"
 
+_FFMPEG_ALIAS_SHIM = r"""
+# Ensure config packages win over modules
+set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
+
+# Ask for common Qt Multimedia components (add more if your build needs them)
+find_package(ffmpeg CONFIG REQUIRED
+    COMPONENTS avformat avcodec avutil swresample swscale
+)
+
+function(_ffmpeg_alias one)
+    if(TARGET ffmpeg::${one} AND NOT TARGET FFmpeg::${one})
+        add_library(FFmpeg::${one} INTERFACE IMPORTED)
+        set_property(TARGET FFmpeg::${one} PROPERTY
+            INTERFACE_LINK_LIBRARIES ffmpeg::${one})
+    endif()
+endfunction()
+
+_ffmpeg_alias(avformat)
+_ffmpeg_alias(avcodec)
+_ffmpeg_alias(avutil)
+_ffmpeg_alias(swresample)
+_ffmpeg_alias(swscale)
+# Add if needed later:
+# _ffmpeg_alias(avdevice)
+# _ffmpeg_alias(avfilter)
+# _ffmpeg_alias(postproc)
+"""
+
 class QtConan(ConanFile):
     _submodules = ["qtsvg", "qtdeclarative", "qttools", "qttranslations", "qtdoc",
                    "qtwayland", "qtquickcontrols2", "qtquicktimeline", "qtquick3d", "qtshadertools", "qt5compat",
@@ -664,17 +692,22 @@ class QtConan(ConanFile):
 
         tc.variables["QT_USE_VCPKG"] = False
         tc.cache_variables["QT_USE_VCPKG"] = False
-        
-        # # 1) Prefer Module mode over Config mode, so CMake will use FindFFmpeg.cmake
-        # tc.cache_variables["CMAKE_FIND_PACKAGE_PREFER_CONFIG"] = False
-        #
-        # # 2) Ensure CMake can see Qt's FindFFmpeg.cmake
-        # extra_modules = [
-        #     os.path.join(self.source_folder, "qtmultimedia", "cmake"),
-        #     os.path.join(self.source_folder, "qtbase", "cmake", "3rdparty", "extra-cmake-modules", "find-modules"),
-        # ]
-        # tc.cache_variables["CMAKE_MODULE_PATH"] = ";".join(extra_modules)
-        
+
+        # Prefer package configs over modules (bypass Qt's FindFFmpeg.cmake)
+        tc.cache_variables["CMAKE_FIND_PACKAGE_PREFER_CONFIG"] = "ON"
+
+        tc.cache_variables["FFmpeg_DIR"] = self.generators_folder
+
+        # Create a alias shim so Qt's uppercase targets exist.
+        if self.options.with_ffmpeg:
+            alias_dir = os.path.join(self.build_folder, "cmake")
+            os.makedirs(alias_dir, exist_ok=True)
+            alias_path = os.path.join(alias_dir, "FFmpegAliases.cmake")
+            save(self, alias_path, _FFMPEG_ALIAS_SHIM)
+
+            # Make CMake include it *very early*
+            tc.cache_variables["CMAKE_PROJECT_TOP_LEVEL_INCLUDES"] = alias_path
+
         tc.generate()
         
         
