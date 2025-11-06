@@ -9,7 +9,10 @@ from conan.tools.files import apply_conandata_patches, copy, get, rmdir
 class XalanCConan(ConanFile):
     name = "xalan-c"
     version= "1.12.0"
-    description = "Xalan-C Library"
+    license = "Apache 2.0"
+    author = "David N Bertoni, Scott Boag, Shane Curcuru, Jack Donohue, Paul Dick, Emily Farmer, Donald Leslie, David Marston, Myriam Midy, Robert Weir"
+    url = "https://github.com/apache/xalan-c"
+    description = "The Apache Xalan-C++ Project provides a library and a command line program to transform XML documents using a stylesheet that conforms to XSLT 1.0 standards."
     settings = "os", "compiler", "build_type", "arch"
     
     options = {
@@ -35,6 +38,7 @@ class XalanCConan(ConanFile):
     def configure(self):
         if self.options.shared:
             self.options.rm_safe("fPIC")
+        self.options["xerces-c"].shared = self.options.shared
         # This library requires C++17
         self.settings.compiler.cppstd = "17"
 
@@ -43,7 +47,6 @@ class XalanCConan(ConanFile):
         required_cppstd = "17"
 
     def requirements(self):
-        """Defines dependencies, conditionally adding Botan and OpenSSL."""
         self.requires("xerces-c/[>=3.3.0 <3.4.0]", transitive_headers = True)  # XML parser
         self.requires("icu/74.2", transitive_headers = True)  # Unicode support
 
@@ -74,6 +77,18 @@ class XalanCConan(ConanFile):
         self.cpp_info.set_property("cmake_target_name", "XalanC::XalanC")
         self.cpp_info.set_property("pkg_config_name", "XalanC")
 
-        self.cpp_info.libs = ["Xalan-C_1", "XalanMsgLib_1"]
-        
+        version_tokens = self.version.split(".")
+
+        if self.settings.os == "Windows":
+            xalan_lib = "Xalan-C_%s" % version_tokens[0]
+            xalan_msg_lib = "XalanMsgLib_%s" % version_tokens[0]
+
+            if self.settings.build_type == "Debug":
+                xalan_lib += "D"
+                xalan_msg_lib += "D"
+        else:
+            xalan_lib = "xalan-c"
+            xalan_msg_lib = "xalanMsg"
+
+        self.cpp_info.libs = [xalan_lib,xalan_msg_lib]
         self.cpp_info.requires = ["xerces-c::xerces-c", "icu::icu"]
