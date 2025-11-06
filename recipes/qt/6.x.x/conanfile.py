@@ -1718,6 +1718,8 @@ class QtConan(ConanFile):
 
         self.prune_missing_libs()
 
+        self.link_ffmpeg_backend()
+
 
 
     # Remove components, that are missing libs. This appears to happen, when webp is disabled.
@@ -1749,7 +1751,7 @@ class QtConan(ConanFile):
                 ll = l.lower()
                 exists = ll in present
                 if not exists and ll.endswith("d"):
-                    exists = ll[:-1] in present  # match base↔debug
+                    exists = ll[:-1] in present  # match base <-> debug
                 (keep if exists else missing).append(l)
 
             if missing:
@@ -1759,3 +1761,52 @@ class QtConan(ConanFile):
 
             comp.libs = keep
 
+
+    def link_ffmpeg_backend(self):
+        # Ensure the FFmpeg plugin (libffmpegmediaplugin) links to its backend
+        # Qt6FFmpegMediaPluginImpl
+
+        components = self.cpp_info.components
+        plugin = "qtQFFmpegMediaPlugin"
+        backend = "qtFFmpegBackendPrivate"
+
+        # plugin present?
+        if plugin not in components:
+            self.output.info(f"[qt-wire] Plugin component not present: {plugin}")
+            return
+
+        # find backend archive in <package>/lib
+        libdir = Path(self.package_folder) / "lib"
+        names = ("Qt6FFmpegMediaPluginImpl", "Qt6MultimediaFFmpeg") # 2nd may not be required
+        found = None
+        for n in names:
+            if (libdir / f"lib{n}.a").exists() or (libdir / f"{n}.lib").exists():
+                found = n
+                break
+
+        if not found:
+            self.output.warning("[qt-wire] FFmpeg backend archive not found in lib/ "
+                                "(expected *FFmpegMediaPluginImpl* or *MultimediaFFmpeg*).")
+            return
+
+        # export private backend component
+        bc = components[backend]
+        if not getattr(bc, "libs", None):
+            bc.libs = [found]
+            bc.libdirs = [str(libdir)]
+            if "qtMultimedia" in components:
+                bc.requires = ["qtMultimedia"]
+
+            self.output.info(f"[qt-wire] Created {backend}: libs={bc.libs}, libdirs={bc.libdirs}, "
+                             f"requires={bc.requires or []}")
+
+        # Some additional pain (Linux): keep correct link order: backend depends on QtMultimedia if present
+        pc = components[plugin]
+        old_reqs = list(pc.requires or [])
+        pc.requires = [backend] + [r for r in old_reqs if r != backend]
+
+        # make backend inherit the plugin's previous requirements
+        bc.requires = list(dict.fromkeys((bc.requires or []) + old_reqs))
+
+        self.output.info(f"[qt-wire] {plugin}.requires: {old_reqs} → {pc.requires}")
+        self.output.info(f"[qt-wire] {backend}.requires: {bc.requires}")
