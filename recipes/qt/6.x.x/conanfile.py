@@ -833,11 +833,15 @@ class QtConan(ConanFile):
         # Patch out the pulseaudio requirement on linux - note, that this will leave ffmpeg unable to deal with audio.
         # Attempts to get pulseaudio to build failed so far.
         qtbi = os.path.join(self.source_folder, "qtmultimedia", "src", "multimedia", "configure.cmake")
-        replace_in_file(
-            self, qtbi,
-            'FFmpeg_FOUND AND (APPLE OR WIN32 OR ANDROID OR QNX OR QT_FEATURE_pulseaudio)',
-            'FFmpeg_FOUND'
-        )
+
+        try:
+            replace_in_file(
+                self, qtbi,
+                'FFmpeg_FOUND AND (APPLE OR WIN32 OR ANDROID OR QNX OR QT_FEATURE_pulseaudio)',
+                'FFmpeg_FOUND'
+            )
+        except:
+            pass
 
         cmake.configure()
         cmake.build()
