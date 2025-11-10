@@ -672,6 +672,9 @@ class QtConan(ConanFile):
         # hard-disable the WebP plugin regardless of what packages are present, it clashes with ffmpeg's webp use.
         tc.cache_variables["FEATURE_webp"] = "OFF"
         tc.cache_variables["QT_FEATURE_webp"] = "OFF"
+        
+        # hack: set required vaapi version hardcoded to 2, because auto-detection doesn't (always?) work properly.
+        tc.cache_variables["VAAPI_SUFFIX"] = "2"
 
         tc.generate()
 
