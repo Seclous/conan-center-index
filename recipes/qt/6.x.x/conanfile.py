@@ -1737,7 +1737,7 @@ class QtConan(ConanFile):
 
         def file_variants(fname: str):
             s = fname.lower()
-            s = re.sub(r'\.(a|so(\.\d+)*)$', '', s)  # strip shared/static suffix + version
+            s = re.sub(r'\.(libd|lib|a|so(\.\d+)*)$', '', s)  # strip shared/static suffix + version
             # account for the quirky Linux lib prefixing.
             if s.startswith("lib"):
                 s = s[3:]  # strip Unix "lib" prefix
@@ -1752,6 +1752,7 @@ class QtConan(ConanFile):
             libs = getattr(comp, "libs", None)
             if not libs:
                 continue
+                
 
             keep, missing = [], []
             for l in libs:
