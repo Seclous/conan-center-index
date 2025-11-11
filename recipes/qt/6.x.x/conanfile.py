@@ -1328,6 +1328,8 @@ class QtConan(ConanFile):
         if self.options.qtwayland and self.options.gui:
             _create_module("WaylandClient", ["Gui", "wayland::wayland-client"])
             _create_module("WaylandCompositor", ["Gui", "wayland::wayland-server"])
+            _create_plugin("QWaylandIntegrationPlugin", "qwayland", "platforms", ["Core", "Gui", "WaylandClient"])
+            
 
         if self.options.get_safe("qtactiveqt") and self.settings.os == "Windows":
             _create_module("AxBase", ["Gui", "Widgets"])
