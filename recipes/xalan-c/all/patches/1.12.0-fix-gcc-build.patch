@@ -1,0 +1,23 @@
+diff --git a/src/xalanc/XMLSupport/XalanOtherEncodingWriter.hpp b/src/xalanc/XMLSupport/XalanOtherEncodingWriter.hpp
+index 8741cea..5e223e2 100644
+--- a/src/xalanc/XMLSupport/XalanOtherEncodingWriter.hpp
++++ b/src/xalanc/XMLSupport/XalanOtherEncodingWriter.hpp
+@@ -320,6 +320,7 @@ public:
+                 {
+                     XalanUnicodeChar    value = decodeUTF16SurrogatePair(ch, theChars[i+1],  getMemoryManager());
+ 
++#if 0
+                     if (this->m_isPresentable(value))
+                     {
+                         write(value);
+@@ -328,7 +329,9 @@ public:
+                     {
+                         this->writeNumberedEntityReference(value);
+                     }
+-
++#else
++                    write(value);
++#endif
+                     ++i;
+                 }
+             }
