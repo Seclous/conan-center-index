@@ -1081,14 +1081,14 @@ class QtConan(ConanFile):
                 requires.append("Core")
             self.cpp_info.components[componentname].requires = _get_corrected_reqs(requires)
 
-        def _create_plugin(pluginname, libname, plugintype, requires):
+        def _create_plugin(pluginname, libname, plugintype, requires, pluginbase="plugins"):
             componentname = f"qt{pluginname}"
             assert componentname not in self.cpp_info.components, f"Plugin {pluginname} already present in self.cpp_info.components"
             self.cpp_info.components[componentname].set_property("cmake_target_name", f"Qt6::{pluginname}")
             self.cpp_info.components[componentname].set_property("cmake_target_aliases", [f"Qt::{pluginname}"])
             if not self.options.shared:
                 self.cpp_info.components[componentname].libs = [libname + libsuffix]
-            self.cpp_info.components[componentname].libdirs = [os.path.join("plugins", plugintype)]
+            self.cpp_info.components[componentname].libdirs = [os.path.join(pluginbase, plugintype)]
             self.cpp_info.components[componentname].includedirs = []
             if "Core" not in requires:
                 requires.append("Core")
@@ -1322,6 +1322,7 @@ class QtConan(ConanFile):
             if qt_quick_enabled:
                 _create_module("Quick", ["Gui", "Qml", "QmlModels"])
                 _add_build_module("qtQuick", self._cmake_qt6_private_file("Quick"))
+                _create_plugin("qtquick2plugin", "qtquick2plugin", os.path.join("QtQuick"), ["Quick", "Qml"], pluginbase="qml")
                 if self.options.widgets:
                     _create_module("QuickWidgets", ["Gui", "Qml", "Quick", "Widgets"])
                 _create_module("QuickShapes", ["Gui", "Qml", "Quick"])
