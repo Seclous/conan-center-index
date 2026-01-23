@@ -1313,7 +1313,8 @@ class QtConan(ConanFile):
         qt_quick_enabled = self.options.gui and self.options.qtshadertools
 
         if self.options.qtdeclarative:
-            _create_module("Qml", ["Network"])
+            _create_module("QmlMeta", [])
+            _create_module("Qml", ["Network", "QmlMeta"])
             _add_build_module("qtQml", self._cmake_qt6_private_file("Qml"))
             _create_module("QmlModels", ["Qml"])
             self.cpp_info.components["qtQmlImportScanner"].set_property("cmake_target_name", "Qt6::QmlImportScanner")
