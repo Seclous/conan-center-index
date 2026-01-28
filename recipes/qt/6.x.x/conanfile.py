@@ -1081,14 +1081,14 @@ class QtConan(ConanFile):
                 requires.append("Core")
             self.cpp_info.components[componentname].requires = _get_corrected_reqs(requires)
 
-        def _create_plugin(pluginname, libname, plugintype, requires):
+        def _create_plugin(pluginname, libname, plugintype, requires, pluginbase="plugins"):
             componentname = f"qt{pluginname}"
             assert componentname not in self.cpp_info.components, f"Plugin {pluginname} already present in self.cpp_info.components"
             self.cpp_info.components[componentname].set_property("cmake_target_name", f"Qt6::{pluginname}")
             self.cpp_info.components[componentname].set_property("cmake_target_aliases", [f"Qt::{pluginname}"])
             if not self.options.shared:
                 self.cpp_info.components[componentname].libs = [libname + libsuffix]
-            self.cpp_info.components[componentname].libdirs = [os.path.join("plugins", plugintype)]
+            self.cpp_info.components[componentname].libdirs = [os.path.join(pluginbase, plugintype)]
             self.cpp_info.components[componentname].includedirs = []
             if "Core" not in requires:
                 requires.append("Core")
@@ -1313,20 +1313,46 @@ class QtConan(ConanFile):
         qt_quick_enabled = self.options.gui and self.options.qtshadertools
 
         if self.options.qtdeclarative:
-            _create_module("Qml", ["Network"])
+            _create_module("QmlMeta", [])
+            _create_module("Qml", ["Network", "QmlMeta"])
             _add_build_module("qtQml", self._cmake_qt6_private_file("Qml"))
             _create_module("QmlModels", ["Qml"])
             self.cpp_info.components["qtQmlImportScanner"].set_property("cmake_target_name", "Qt6::QmlImportScanner")
             self.cpp_info.components["qtQmlImportScanner"].set_property("cmake_target_aliases", ["Qt::QmlImportScanner"])
             self.cpp_info.components["qtQmlImportScanner"].requires = _get_corrected_reqs(["Qml"])
+            
             if qt_quick_enabled:
                 _create_module("Quick", ["Gui", "Qml", "QmlModels"])
                 _add_build_module("qtQuick", self._cmake_qt6_private_file("Quick"))
+                
+                # Create QuickControls2 modules
+                _create_module("QuickControls2", ["Gui", "Quick"])
+                _create_module("QuickTemplates2", ["Gui", "Quick"])
+                _create_module("QuickLayouts", ["Gui", "Quick"])
+                _create_module("QuickControls2Basic", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
+                _create_module("QuickControls2BasicStyleImpl", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
+                _create_module("QuickControls2Impl", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
+                _create_module("QuickControls2Fusion", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
+                _create_module("QuickControls2FusionStyleImpl", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
+                
+                # NOW create the plugins that depend on those modules
+                _create_plugin("Quick2Plugin", "qtquick2plugin", "QtQuick", ["Qml", "Quick"], pluginbase="qml")
+                _create_plugin("QuickControls2Plugin", "qtquickcontrols2plugin", "QtQuick/Controls", ["Quick", "QuickControls2", "QuickTemplates2"], pluginbase="qml")
+                _create_plugin("QuickTemplates2Plugin", "qtquicktemplates2plugin", "QtQuick/Templates", ["Quick", "QuickTemplates2"], pluginbase="qml")
+                _create_plugin("QuickControls2BasicStylePlugin", "qtquickcontrols2basicstyleplugin", "QtQuick/Controls/Basic", ["Quick", "QuickTemplates2"], pluginbase="qml")
+                _create_plugin("QuickLayoutsPlugin", "qquicklayoutsplugin", "QtQuick/Layouts", ["Gui", "Quick"], pluginbase="qml")
+                _create_plugin("QuickControls2FusionStylePlugin", "qtquickcontrols2fusionstyleplugin", "QtQuick/Controls/Fusion", ["Quick", "QuickTemplates2"], pluginbase="qml")
+                
                 if self.options.widgets:
                     _create_module("QuickWidgets", ["Gui", "Qml", "Quick", "Widgets"])
                 _create_module("QuickShapes", ["Gui", "Qml", "Quick"])
                 _create_module("QuickTest", ["Test", "Quick"])
+            
             _create_module("QmlWorkerScript", ["Qml"])
+            
+            # Add QmlModels and QmlWorkerScript plugins
+            _create_plugin("QmlModelsPlugin", "modelsplugin", "QtQml/Models", ["Qml", "QmlModels"], pluginbase="qml")
+            _create_plugin("QmlWorkerScriptPlugin", "workerscriptplugin", "QtQml/WorkerScript", ["Qml", "QmlWorkerScript"], pluginbase="qml")
 
         if self.options.qttools and self.options.gui and self.options.widgets:
             self.cpp_info.components["qtLinguistTools"].set_property("cmake_target_name", "Qt6::LinguistTools")
@@ -1349,9 +1375,9 @@ class QtConan(ConanFile):
             _create_module("Quick3DRuntimeRender", ["Gui", "Quick", "Quick3DAssetImport", "Quick3DUtils", "ShaderTools"])
             _create_module("Quick3D", ["Gui", "Qml", "Quick", "Quick3DRuntimeRender"])
 
-        if (self.options.get_safe("qtquickcontrols2") or self.options.qtdeclarative) and qt_quick_enabled:
-            _create_module("QuickControls2", ["Gui", "Quick"])
-            _create_module("QuickTemplates2", ["Gui", "Quick"])
+        # if (self.options.get_safe("qtquickcontrols2") or self.options.qtdeclarative) and qt_quick_enabled:
+        #    _create_module("QuickControls2", ["Gui", "Quick"])
+        #     _create_module("QuickTemplates2", ["Gui", "Quick"])
 
         if self.options.qtsvg and self.options.gui:
             _create_module("Svg", ["Gui"])
@@ -1749,7 +1775,6 @@ class QtConan(ConanFile):
                     obj_files = [os.path.join(root, file) for file in files]
                     self.cpp_info.components[component].exelinkflags.extend(obj_files)
                     self.cpp_info.components[component].sharedlinkflags.extend(obj_files)
-
         build_modules_list = []
 
         if self.options.qtdeclarative:
