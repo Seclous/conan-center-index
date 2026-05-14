@@ -1,0 +1,297 @@
+diff --git a/xsd/cxx/tree/serialization/date-time.txx b/xsd/cxx/tree/serialization/date-time.txx
+index fe305a4..b862c9a 100644
+--- a/xsd/cxx/tree/serialization/date-time.txx
++++ b/xsd/cxx/tree/serialization/date-time.txx
+@@ -1,6 +1,7 @@
+ // file      : xsd/cxx/tree/serialization/date-time.txx
+ // license   : GNU GPL v2 + exceptions; see accompanying LICENSE file
+ 
++#include <ios>
+ #include <locale>
+ #include <string>
+ #include <ostream>
+@@ -14,6 +15,41 @@ namespace xsd
+   {
+     namespace tree
+     {
++      namespace bits
++      {
++        template <typename C>
++        inline void
++        classic_locale (std::basic_ios<C>& ios)
++        {
++          ios.imbue (std::locale::classic ());
++        }
++
++        template <typename C>
++        class scoped_stream_locale
++        {
++        public:
++          explicit
++          scoped_stream_locale (std::basic_ios<C>& ios)
++              : ios_ (ios), locale_ (ios.getloc ())
++          {
++            ios_.imbue (std::locale::classic ());
++          }
++
++          ~scoped_stream_locale ()
++          {
++            ios_.imbue (locale_);
++          }
++
++        private:
++          scoped_stream_locale (const scoped_stream_locale&);
++          scoped_stream_locale& operator= (const scoped_stream_locale&);
++
++        private:
++          std::basic_ios<C>& ios_;
++          std::locale locale_;
++        };
++      }
++
+       // time_zone
+       //
+       namespace bits
+@@ -84,6 +120,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const gday<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -93,6 +130,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const gday<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -101,6 +139,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const gday<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -130,6 +169,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const gmonth<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -139,6 +179,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const gmonth<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -147,6 +188,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const gmonth<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -172,6 +214,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const gyear<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -181,6 +224,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const gyear<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -189,6 +233,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const gyear<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -220,6 +265,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const gmonth_day<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -229,6 +275,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const gmonth_day<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -237,6 +284,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const gmonth_day<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -267,6 +315,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const gyear_month<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -276,6 +325,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const gyear_month<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -284,6 +334,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const gyear_month<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -316,6 +367,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const date<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -325,6 +377,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const date<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -333,6 +386,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const date<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -357,7 +411,7 @@ namespace xsd
+             os << x.minutes () << C (':');
+ 
+             std::basic_ostringstream<C> ostr;
+-            ostr.imbue (std::locale::classic ());
++            bits::classic_locale (ostr);
+             ostr.width (9);
+             ostr.fill (C ('0'));
+             ostr << std::fixed << x.seconds ();
+@@ -391,6 +445,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const time<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -400,6 +455,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const time<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -408,6 +464,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const time<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -443,7 +500,7 @@ namespace xsd
+             os << x.minutes () << C (':');
+ 
+             std::basic_ostringstream<C> ostr;
+-            ostr.imbue (std::locale::classic ());
++            bits::classic_locale (ostr);
+             ostr.width (9);
+             ostr.fill (C ('0'));
+             ostr << std::fixed << x.seconds ();
+@@ -477,6 +534,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const date_time<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -486,6 +544,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const date_time<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -494,6 +553,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const date_time<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+ 
+@@ -565,7 +625,7 @@ namespace xsd
+           if (x.seconds () > 0.0)
+           {
+             std::basic_ostringstream<C> ostr;
+-            ostr.imbue (std::locale::classic ());
++            bits::classic_locale (ostr);
+             ostr << std::fixed << x.seconds ();
+ 
+             std::basic_string<C> s (ostr.str ());
+@@ -594,6 +654,7 @@ namespace xsd
+       operator<< (xercesc::DOMElement& e, const duration<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         e << os.str ();
+       }
+@@ -603,6 +664,7 @@ namespace xsd
+       operator<< (xercesc::DOMAttr& a, const duration<C, B>& x)
+       {
+         std::basic_ostringstream<C> os;
++        bits::classic_locale (os);
+         bits::insert (os, x);
+         a << os.str ();
+       }
+@@ -611,6 +673,7 @@ namespace xsd
+       inline void
+       operator<< (list_stream<C>& ls, const duration<C, B>& x)
+       {
++        bits::scoped_stream_locale<C> locale_guard (ls.os_);
+         bits::insert (ls.os_, x);
+       }
+     }
