@@ -2,3 +2,7 @@ sources:
   "4.2.0":
     url: "https://codesynthesis.com/download/xsd/4.2/libxsd-4.2.0.tar.gz"
     sha256: "55CAF0038603883EB39AC4CAEAACDA23A09CF81CFFC8EB55A854B6B06EF2C52E"
+patches:
+  "4.2.0":
+    - patch_file: "patches/0001-force-classic-locale-for-date-time-ostream.patch"
+      patch_description: "Force the classic locale while formatting fractional seconds in std::ostream serializers."
