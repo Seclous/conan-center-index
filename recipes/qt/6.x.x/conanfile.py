@@ -1320,11 +1320,11 @@ class QtConan(ConanFile):
             self.cpp_info.components["qtQmlImportScanner"].set_property("cmake_target_name", "Qt6::QmlImportScanner")
             self.cpp_info.components["qtQmlImportScanner"].set_property("cmake_target_aliases", ["Qt::QmlImportScanner"])
             self.cpp_info.components["qtQmlImportScanner"].requires = _get_corrected_reqs(["Qml"])
-            
+
             if qt_quick_enabled:
                 _create_module("Quick", ["Gui", "Qml", "QmlModels"])
                 _add_build_module("qtQuick", self._cmake_qt6_private_file("Quick"))
-                
+
                 # Create QuickControls2 modules
                 _create_module("QuickControls2", ["Gui", "Quick"])
                 _create_module("QuickTemplates2", ["Gui", "Quick"])
@@ -1334,7 +1334,7 @@ class QtConan(ConanFile):
                 _create_module("QuickControls2Impl", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
                 _create_module("QuickControls2Fusion", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
                 _create_module("QuickControls2FusionStyleImpl", ["Gui", "Quick", "QuickControls2", "QuickTemplates2"])
-                
+
                 # NOW create the plugins that depend on those modules
                 _create_plugin("Quick2Plugin", "qtquick2plugin", "QtQuick", ["Qml", "Quick"], pluginbase="qml")
                 _create_plugin("QuickControls2Plugin", "qtquickcontrols2plugin", "QtQuick/Controls", ["Quick", "QuickControls2", "QuickTemplates2"], pluginbase="qml")
@@ -1342,14 +1342,14 @@ class QtConan(ConanFile):
                 _create_plugin("QuickControls2BasicStylePlugin", "qtquickcontrols2basicstyleplugin", "QtQuick/Controls/Basic", ["Quick", "QuickTemplates2"], pluginbase="qml")
                 _create_plugin("QuickLayoutsPlugin", "qquicklayoutsplugin", "QtQuick/Layouts", ["Gui", "Quick"], pluginbase="qml")
                 _create_plugin("QuickControls2FusionStylePlugin", "qtquickcontrols2fusionstyleplugin", "QtQuick/Controls/Fusion", ["Quick", "QuickTemplates2"], pluginbase="qml")
-                
+
                 if self.options.widgets:
                     _create_module("QuickWidgets", ["Gui", "Qml", "Quick", "Widgets"])
                 _create_module("QuickShapes", ["Gui", "Qml", "Quick"])
                 _create_module("QuickTest", ["Test", "Quick"])
-            
+
             _create_module("QmlWorkerScript", ["Qml"])
-            
+
             # Add QmlModels and QmlWorkerScript plugins
             _create_plugin("QmlModelsPlugin", "modelsplugin", "QtQml/Models", ["Qml", "QmlModels"], pluginbase="qml")
             _create_plugin("QmlWorkerScriptPlugin", "workerscriptplugin", "QtQml/WorkerScript", ["Qml", "QmlWorkerScript"], pluginbase="qml")
@@ -1375,10 +1375,6 @@ class QtConan(ConanFile):
             _create_module("Quick3DRuntimeRender", ["Gui", "Quick", "Quick3DAssetImport", "Quick3DUtils", "ShaderTools"])
             _create_module("Quick3D", ["Gui", "Qml", "Quick", "Quick3DRuntimeRender"])
 
-        # if (self.options.get_safe("qtquickcontrols2") or self.options.qtdeclarative) and qt_quick_enabled:
-        #    _create_module("QuickControls2", ["Gui", "Quick"])
-        #     _create_module("QuickTemplates2", ["Gui", "Quick"])
-
         if self.options.qtsvg and self.options.gui:
             _create_module("Svg", ["Gui"])
             _create_plugin("QSvgIconPlugin", "qsvgicon", "iconengines", [])
@@ -1396,7 +1392,7 @@ class QtConan(ConanFile):
             self.cpp_info.components["qtAxServer"].system_libs.append("shell32")
             self.cpp_info.components["qtAxServer"].defines.append("QAXSERVER")
             _create_module("AxContainer", ["AxBase"])
-        
+
         if self.options.get_safe("qtcharts"):
             _create_module("Charts", ["Gui", "Widgets"])
         if self.options.get_safe("qtgraphs") and Version(self.version) >= "6.8.0":
