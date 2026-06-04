@@ -1,6 +1,7 @@
 import configparser
 import glob
 import os
+import re
 import platform
 import textwrap
 
@@ -14,6 +15,13 @@ from conan.tools.gnu import PkgConfigDeps
 from conan.tools.microsoft import msvc_runtime_flag, is_msvc
 from conan.tools.scm import Version
 from conan.errors import ConanException, ConanInvalidConfiguration
+from pathlib import Path
+
+# NOTE:
+# Sections marked with     # FFMPEG_FIX ######################
+# Are workarounds to fix problems with integrating ffmpeg, that cause limitations (e.g. no webp, no pulseaudio)
+# Attempt proper fixes at some point
+
 
 required_conan_version = ">=2.0"
 
@@ -677,6 +685,15 @@ class QtConan(ConanFile):
         with_egl = self.options.get_safe("with_egl", False)
         tc.variables["CMAKE_DISABLE_FIND_PACKAGE_EGL"] = not with_egl
 
+        # FFMPEG_FIX ######################
+        # hard-disable the WebP plugin regardless of what packages are present, it clashes with ffmpeg's webp use.
+        tc.cache_variables["FEATURE_webp"] = "OFF"
+        tc.cache_variables["QT_FEATURE_webp"] = "OFF"
+        
+        # hack: set required vaapi version hardcoded to 2, because auto-detection doesn't (always?) work properly.
+        tc.cache_variables["VAAPI_SUFFIX"] = "2"
+        ###################################
+
         tc.generate()
 
     def package_id(self):
@@ -833,6 +850,22 @@ class QtConan(ConanFile):
             save(self, ".qmake.stash", "")
             save(self, ".qmake.super", "")
         cmake = CMake(self)
+
+        # FFMPEG_FIX ######################
+        # Patch out the pulseaudio requirement on linux - note, that this will leave ffmpeg unable to deal with audio.
+        # Attempts to get pulseaudio to build failed so far.
+        qtbi = os.path.join(self.source_folder, "qtmultimedia", "src", "multimedia", "configure.cmake")
+
+        try:
+            replace_in_file(
+                self, qtbi,
+                'FFmpeg_FOUND AND (APPLE OR WIN32 OR ANDROID OR QNX OR QT_FEATURE_pulseaudio)',
+                'FFmpeg_FOUND'
+            )
+        except:
+            pass
+        # #################################
+
         cmake.configure()
         cmake.build()
 
@@ -1808,3 +1841,102 @@ class QtConan(ConanFile):
         self.cpp_info.set_property("cmake_build_modules", build_modules_list)
 
         self.conf_info.define("user.qt:tools_directory", os.path.join(self.package_folder, "bin" if self.settings.os == "Windows" else "libexec"))
+
+        # FFMPEG_FIX ######################
+        self.prune_missing_libs()
+
+        self.link_ffmpeg_backend()
+
+
+
+    # Remove components, that are missing libs. This appears to happen, when webp is disabled.
+    # Expect the following output: [qt] Pruning missing libs from 'qtQWebpPlugin': qwebp
+    def prune_missing_libs(self):
+        pkgroot = Path(self.package_folder)
+        present = set()
+
+        def file_variants(fname: str):
+            s = fname.lower()
+            s = re.sub(r'\.(libd|lib|a|so(\.\d+)*)$', '', s)  # strip shared/static suffix + version
+            # account for the quirky Linux lib prefixing.
+            if s.startswith("lib"):
+                s = s[3:]  # strip Unix "lib" prefix
+            # tolerate debug-suffix (Windows debug naming)
+            return {s, s[:-1]} if s.endswith("d") else {s, s + "d"}
+
+        for pat in ("*.lib", "*.a", "*.so", "*.so.*", "*.dylib"):
+            for p in pkgroot.rglob(pat):
+                present |= file_variants(p.name)
+
+        for comp_name, comp in self.cpp_info.components.items():
+            libs = getattr(comp, "libs", None)
+            if not libs:
+                continue
+                
+
+            keep, missing = [], []
+            for l in libs:
+                ll = l.lower()
+                exists = ll in present
+                if not exists and ll.endswith("d"):
+                    exists = ll[:-1] in present  # match base <-> debug
+                (keep if exists else missing).append(l)
+
+            if missing:
+                self.output.warning(
+                    f"[qt] Pruning missing libs from '{comp_name}': {', '.join(missing)}"
+                )
+
+            comp.libs = keep
+
+
+    def link_ffmpeg_backend(self):
+        # Ensure the FFmpeg plugin (libffmpegmediaplugin) links to its backend
+        # Qt6FFmpegMediaPluginImpl
+
+        components = self.cpp_info.components
+        plugin = "qtQFFmpegMediaPlugin"
+        backend = "qtFFmpegBackendPrivate"
+
+        # plugin present?
+        if plugin not in components:
+            self.output.info(f"[qt-wire] Plugin component not present: {plugin}")
+            return
+
+        # find backend archive in <package>/lib
+        libdir = Path(self.package_folder) / "lib"
+        names = ("Qt6FFmpegMediaPluginImpl", "Qt6MultimediaFFmpeg") # 2nd may not be required
+        found = None
+        for n in names:
+            if (libdir / f"lib{n}.a").exists() or (libdir / f"{n}.lib").exists():
+                found = n
+                break
+
+        if not found:
+            self.output.warning("[qt-wire] FFmpeg backend archive not found in lib/ "
+                                "(expected *FFmpegMediaPluginImpl* or *MultimediaFFmpeg*).")
+            return
+
+        # export private backend component
+        bc = components[backend]
+        if not getattr(bc, "libs", None):
+            bc.libs = [found]
+            bc.libdirs = [str(libdir)]
+            if "qtMultimedia" in components:
+                bc.requires = ["qtMultimedia"]
+
+            self.output.info(f"[qt-wire] Created {backend}: libs={bc.libs}, libdirs={bc.libdirs}, "
+                             f"requires={bc.requires or []}")
+
+        # Some additional pain (Linux): keep correct link order: backend depends on QtMultimedia if present
+        pc = components[plugin]
+        old_reqs = list(pc.requires or [])
+        pc.requires = [backend] + [r for r in old_reqs if r != backend]
+
+        # make backend inherit the plugin's previous requirements
+        bc.requires = list(dict.fromkeys((bc.requires or []) + old_reqs))
+
+        self.output.info(f"[qt-wire] {plugin}.requires: {old_reqs} -> {pc.requires}")
+        self.output.info(f"[qt-wire] {backend}.requires: {bc.requires}")
+
+    # END FFMPEG_FIX ##################
