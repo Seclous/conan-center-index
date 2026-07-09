@@ -1,0 +1,161 @@
+Subject: [PATCH] Fix unit_test.cpp compilation
+---
+Index: test/unit_test.cpp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/test/unit_test.cpp b/test/unit_test.cpp
+--- a/test/unit_test.cpp	(revision 05b3b3c0fa49a235d38cbc96375bdac7da9010c4)
++++ b/test/unit_test.cpp	(revision 712bfac33ce657a0270bcf1501b99f665684a33d)
+@@ -83,25 +83,25 @@
+ #endif
+ 
+ //===== select compress plugin =====
+-#define _CompressPlugin_no
+-//#define _CompressPlugin_zlib
+-//#define _CompressPlugin_ldef
+-//#define _CompressPlugin_bz2
+-//#define _CompressPlugin_lzma
+-//#define _CompressPlugin_lzma2
+-//#define _CompressPlugin_lz4
+-//#define _CompressPlugin_lz4hc
+-//#define _CompressPlugin_zstd
+-//#define _CompressPlugin_brotli
+-//#define _CompressPlugin_lzham
+-//#define _CompressPlugin_tuz
++#define _TestCompressPlugin_no
++//#define _TestCompressPlugin_zlib
++//#define _TestCompressPlugin_ldef
++//#define _TestCompressPlugin_bz2
++//#define _TestCompressPlugin_lzma
++//#define _TestCompressPlugin_lzma2
++//#define _TestCompressPlugin_lz4
++//#define _TestCompressPlugin_lz4hc
++//#define _TestCompressPlugin_zstd
++//#define _TestCompressPlugin_brotli
++//#define _TestCompressPlugin_lzham
++//#define _TestCompressPlugin_tuz
+ 
+ #define IS_NOTICE_compress_canceled 0 //for test, close compress fail notice
+ #define IS_REUSE_compress_handle    1 //for test, must in single thread
+ #include "../compress_plugin_demo.h"   
+ #include "../decompress_plugin_demo.h"
+ 
+-#ifndef _CompressPlugin_no
++#ifndef _TestCompressPlugin_no
+ #include "../../hsynz/dict_compress_plugin_demo.h"   // https://github.com/sisong/hsynz
+ #include "../../hsynz/dict_decompress_plugin_demo.h" // https://github.com/sisong/hsynz
+ #endif
+@@ -109,76 +109,76 @@
+ //#define _ChecksumPlugin_crc32
+ #define _ChecksumPlugin_fadler64
+ #include "../checksum_plugin_demo.h"
+-//static hpatch_TChecksum* hsynzStrongChecksum=&crc32ChecksumPlugin; //not strong enough for hsynz, just for testing.  
+-static hpatch_TChecksum* hsynzStrongChecksum=&fadler64ChecksumPlugin; //can't be used for hsynz, just for testing.  
++//static hpatch_TChecksum* hsynzStrongChecksum=&crc32ChecksumPlugin; //not strong enough for hsynz, just for testing.
++static hpatch_TChecksum* hsynzStrongChecksum=&fadler64ChecksumPlugin; //can't be used for hsynz, just for testing.
+ static hpatch_TChecksum* hWinDiffChecksum=&fadler64ChecksumPlugin;
+ 
+-#ifdef  _CompressPlugin_no
++#ifdef  _TestCompressPlugin_no
+     const hdiff_TCompress* compressPlugin=0;
+     hpatch_TDecompress* decompressPlugin=0;
+     hpi_compressType compressHpiType=hpi_compressType_no;
+ #endif
+-#ifdef  _CompressPlugin_zlib
++#ifdef  _TestCompressPlugin_zlib
+     const hdiff_TCompress* compressPlugin=&zlibCompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&zlibDecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_zlib;
+ #endif
+-#ifdef  _CompressPlugin_bz2
++#ifdef  _TestCompressPlugin_bz2
+     const hdiff_TCompress* compressPlugin=&bz2CompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&bz2DecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_bz2;
+ #endif
+-#ifdef  _CompressPlugin_lzma
++#ifdef  _TestCompressPlugin_lzma
+     const hdiff_TCompress* compressPlugin=&lzmaCompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&lzmaDecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_lzma;
+ #endif
+-#ifdef  _CompressPlugin_lzma2
++#ifdef  _TestCompressPlugin_lzma2
+     const hdiff_TCompress* compressPlugin=&lzma2CompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&lzma2DecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_lzma2;
+ #endif
+-#ifdef  _CompressPlugin_lz4
++#ifdef  _TestCompressPlugin_lz4
+     const hdiff_TCompress* compressPlugin=&lz4CompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&lz4DecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_lz4;
+ #endif
+-#ifdef  _CompressPlugin_lz4hc
++#ifdef  _TestCompressPlugin_lz4hc
+     const hdiff_TCompress* compressPlugin=&lz4hcCompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&lz4DecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_lz4;
+ #endif
+-#ifdef  _CompressPlugin_zstd
++#ifdef  _TestCompressPlugin_zstd
+     const hdiff_TCompress* compressPlugin=&zstdCompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&zstdDecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_zstd;
+ #endif
+-#ifdef  _CompressPlugin_brotli
++#ifdef  _TestCompressPlugin_brotli
+     const hdiff_TCompress* compressPlugin=&brotliCompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&brotliDecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_brotli;
+ #endif
+-#ifdef  _CompressPlugin_lzham
++#ifdef  _TestCompressPlugin_lzham
+     const hdiff_TCompress* compressPlugin=&lzhamCompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&lzhamDecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_lzham;
+ #endif
+-#ifdef  _CompressPlugin_tuz
++#ifdef  _TestCompressPlugin_tuz
+     const hdiff_TCompress* compressPlugin=&tuzCompressPlugin.base;
+     hpatch_TDecompress* decompressPlugin=&tuzDecompressPlugin;
+     hpi_compressType compressHpiType=hpi_compressType_tuz;
+ #endif
+ 
+ static hsync_TDictCompress* _getDictCompressPlugin(){
+-#if defined(_CompressPlugin_ldef)
++#if defined(_TestCompressPlugin_ldef)
+     static TDictCompressPlugin_ldef _ldefDictCompressPlugin=ldefDictCompressPlugin;
+     _ldefDictCompressPlugin.compress_level=6;
+     return &_ldefDictCompressPlugin.base;
+-#elif defined(_CompressPlugin_zlib)
++#elif defined(_TestCompressPlugin_zlib)
+     static TDictCompressPlugin_zlib _zlibDictCompressPlugin=zlibDictCompressPlugin;
+     _zlibDictCompressPlugin.compress_level=6;
+     return &_zlibDictCompressPlugin.base;
+-#elif defined(_CompressPlugin_zstd)
++#elif defined(_TestCompressPlugin_zstd)
+     static TDictCompressPlugin_zstd _zstdDictCompressPlugin=zstdDictCompressPlugin;
+     _zstdDictCompressPlugin.compress_level=18;
+     return &_zstdDictCompressPlugin.base;
+@@ -282,15 +282,15 @@
+         return hsynzStrongChecksum;
+     }
+     static hsync_TDictDecompress* _findDecompressPlugin(ISyncInfoListener* listener,const char* compressType,size_t dictSize){
+-#if defined(_CompressPlugin_ldef)
++#if defined(_TestCompressPlugin_ldef)
+         static TDictDecompressPlugin_ldef _ldefDictDecompressPlugin=ldefDictDecompressPlugin;
+         _ldefDictDecompressPlugin.dict_bits=(hpatch_byte)_dictSizeToDictBits(dictSize);
+         return &_ldefDictDecompressPlugin.base;
+-#elif defined(_CompressPlugin_zlib)
++#elif defined(_TestCompressPlugin_zlib)
+         static TDictDecompressPlugin_zlib _zlibDictDecompressPlugin=zlibDictDecompressPlugin;
+         _zlibDictDecompressPlugin.dict_bits=(hpatch_byte)_dictSizeToDictBits(dictSize);
+         return &_zlibDictDecompressPlugin.base;
+-#elif defined(_CompressPlugin_zstd)
++#elif defined(_TestCompressPlugin_zstd)
+         static TDictDecompressPlugin_zstd _zstdDictDecompressPlugin=zstdDictDecompressPlugin;
+         _zstdDictDecompressPlugin.dictSize=dictSize;
+         return &_zstdDictDecompressPlugin.base;
