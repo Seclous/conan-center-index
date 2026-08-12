@@ -1,0 +1,1098 @@
+Subject: [PATCH] Add cmake configuration
+---
+Index: CMakeLists.txt
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/CMakeLists.txt	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,374 @@
++cmake_minimum_required(VERSION 3.24)
++
++project(HDiffPatch LANGUAGES C CXX VERSION 5.1.3)
++
++list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
++
++if (NOT CMAKE_BUILD_TYPE)
++    set(CMAKE_BUILD_TYPE Release)
++endif ()
++
++include(CheckIPOSupported)
++
++# This CMake file intentionally mirrors some of the upstream Makefile defaults
++
++set(HDIFFPATCH_ROOT "${CMAKE_CURRENT_LIST_DIR}" CACHE PATH "Path to the HDiffPatch source tree")
++
++option(HDIFFPATCH_BUILD_TOOLS "Build hdiffz and hpatchz command line tools" ON)
++option(HDIFFPATCH_BUILD_TESTS "Build upstream unit_test target" OFF)
++option(HDIFFPATCH_ENABLE_DIR_DIFF "Enable directory diff/patch support" ON)
++option(HDIFFPATCH_ENABLE_MULTITHREAD "Enable multithread support" ON)
++option(HDIFFPATCH_ENABLE_VCDIFF "Enable VCDIFF compatibility support" ON)
++option(HDIFFPATCH_ENABLE_BSDIFF "Enable bsdiff/bspatch compatibility support" ON)
++option(HDIFFPATCH_ENABLE_MD5 "Enable md5 checksum plugin for directory diff" OFF) # Default ON Makefile
++option(HDIFFPATCH_ENABLE_XXHASH "Enable xxh3 and xxh128 checksum plugins for directory diff" OFF) # Default ON Makefile
++option(HDIFFPATCH_ENABLE_LOGGING "Enable logging" OFF)
++option(HDIFFPATCH_ENABLE_ATOMIC_U64 "Assume atomic uint64_t support" ON)
++option(HDIFFPATCH_ENABLE_ARM64_LZMA_ASM "Use 7-Zip arm64 optimized LZMA decoder when bundled LZMA is used" OFF)
++option(HDIFFPATCH_USE_CRC_EMU "Force 7-Zip software CRC implementation for VCDIFF/LZMA" OFF)
++option(HDIFFPATCH_MIN_SIZE "Use upstream Makefile MINS size-oriented options" OFF)
++option(HDIFFPATCH_NO_PIE "Pass -no-pie on ELF platforms, matching upstream PIE=-1" OFF)
++option(HDIFFPATCH_STATIC_C_RUNTIME_GNU "Pass -static on GCC/Clang link lines, matching upstream STATIC_C=1" OFF)
++option(HDIFFPATCH_STATIC_CXX_RUNTIME_GNU "Pass -static-libstdc++ on GCC/Clang hdiffz/unit_test, matching upstream STATIC_CPP=1" OFF)
++option(HDIFFPATCH_MSVC_STATIC_RUNTIME "Use /MT and /MTd like the Visual Studio projects" OFF)
++option(HDIFFPATCH_ENABLE_HSYNC_SOURCES "Include libhsync sources in libhdiffpatch like the upstream Makefile archive" ON)
++option(HDIFFPATCH_ENABLE_BZIP2 "Use bzip2" ON)
++option(HDIFFPATCH_ENABLE_LIBDEFLATE "Use libdeflate" OFF) # Default ON Makefile
++option(HDIFFPATCH_ENABLE_ZLIB "Use ZLIB" OFF) # Default ON Makefile
++option(HDIFFPATCH_ENABLE_LZMA "Use LZMA" OFF) # Default ON Makefile
++option(HDIFFPATCH_ENABLE_ZSTD "Use ZSTD" OFF) # Default ON Makefile
++
++if (MSVC AND HDIFFPATCH_MSVC_STATIC_RUNTIME)
++    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
++endif ()
++
++if (HDIFFPATCH_ENABLE_BSDIFF AND NOT HDIFFPATCH_ENABLE_BZIP2)
++    message(FATAL_ERROR "Upstream requires bzip2 when BSDIFF support is enabled. Disable HDIFFPATCH_ENABLE_BSDIFF or enable HDIFFPATCH_ENABLE_BZIP2.")
++endif ()
++
++if (HDIFFPATCH_ENABLE_LIBDEFLATE AND NOT HDIFFPATCH_ENABLE_ZLIB)
++    message(WARNING "Upstream warns that libdeflate cannot support every deflate stream without bundled zlib sources.")
++endif ()
++
++function(hdp_resolve_sources out_var)
++    set(_result)
++    foreach (_rel IN LISTS ARGN)
++        set(_base "${_rel}")
++        if (NOT IS_ABSOLUTE "${_base}")
++            set(_base "${HDIFFPATCH_ROOT}/${_base}")
++        endif ()
++
++        set(_found "")
++        foreach (_candidate IN ITEMS
++                "${_base}"
++                "${_base}.c"
++                "${_base}.cpp"
++                "${_base}.cc"
++                "${_base}.cxx"
++                "${_base}.S"
++                "${_base}.asm"
++                "${_base}.ASM")
++            if (EXISTS "${_candidate}")
++                set(_found "${_candidate}")
++                break()
++            endif ()
++        endforeach ()
++
++        if (NOT _found)
++            message(FATAL_ERROR "Required source not found: ${_rel}. Check HDIFFPATCH_ROOT and bundled dependency paths.")
++        endif ()
++        list(APPEND _result "${_found}")
++    endforeach ()
++    set(${out_var} "${_result}" PARENT_SCOPE)
++endfunction()
++
++function(hdp_apply_common_compile_settings target)
++    set_target_properties(${target} PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON)
++
++    check_ipo_supported(RESULT ipo_supported)
++    if (ipo_supported AND CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo")
++        set_property(TARGET ${target} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
++    endif ()
++
++    if (MSVC)
++        target_compile_options(${target} PRIVATE /W3 /wd4819)
++    else ()
++        if (HDIFFPATCH_MIN_SIZE)
++            set_property(TARGET ${target} PROPERTY CXX_VISIBILITY_PRESET hidden)
++            set_property(TARGET ${target} PROPERTY VISIBILITY_INLINES_HIDDEN ON)
++            target_compile_options(${target} PRIVATE
++                    -Wno-error=format-security
++                    -ffunction-sections
++                    -fdata-sections
++                    -ffat-lto-objects)
++        endif ()
++    endif ()
++endfunction()
++
++function(hdp_apply_common_link_settings target)
++    if (HDIFFPATCH_NO_PIE)
++        set_target_properties(${target} PROPERTIES POSITION_INDEPENDENT_CODE OFF)
++    endif ()
++
++    if (NOT MSVC)
++        if (HDIFFPATCH_MIN_SIZE)
++            target_link_options(${target} PRIVATE -s -Wl,--gc-sections,--as-needed)
++        endif ()
++        if (HDIFFPATCH_STATIC_C_RUNTIME_GNU)
++            target_link_options(${target} PRIVATE -static)
++        endif ()
++    endif ()
++endfunction()
++
++add_library(hdiffpatch_options INTERFACE)
++target_include_directories(hdiffpatch_options
++        INTERFACE
++        $<BUILD_INTERFACE:${HDIFFPATCH_ROOT}>
++        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
++)
++target_compile_definitions(hdiffpatch_options INTERFACE
++        _LARGEFILE_SOURCE
++        _FILE_OFFSET_BITS=64
++        _IS_NEED_ALL_CompressPlugin=0
++        _IS_NEED_DEFAULT_CompressPlugin=0
++        _IS_NEED_ALL_ChecksumPlugin=0
++        _IS_NEED_DEFAULT_ChecksumPlugin=0
++        $<$<PLATFORM_ID:Windows>:_IS_USED_WIN32_UTF8_WAPI=1>
++        $<$<PLATFORM_ID:Windows>:_CRT_SECURE_NO_WARNINGS>
++        _IS_OUT_DIFF_INFO=$<IF:$<BOOL:${HDIFFPATCH_ENABLE_DIFF_INFO}>,1,0>
++        _IS_NEED_BSDIFF=$<IF:$<BOOL:${HDIFFPATCH_ENABLE_BSDIFF}>,1,0>
++        _IS_NEED_VCDIFF=$<IF:$<BOOL:${HDIFFPATCH_ENABLE_VCDIFF}>,1,0>
++)
++
++if (NOT HDIFFPATCH_ENABLE_ATOMIC_U64)
++    target_compile_definitions(hdiffpatch_options INTERFACE _IS_NO_ATOMIC_U64=1)
++endif ()
++
++if (HDIFFPATCH_ENABLE_DIR_DIFF)
++    target_compile_definitions(hdiffpatch_options INTERFACE _IS_NEED_DIR_DIFF_PATCH=1 _ChecksumPlugin_fadler64)
++else ()
++    target_compile_definitions(hdiffpatch_options INTERFACE _IS_NEED_DIR_DIFF_PATCH=0)
++endif ()
++
++if (HDIFFPATCH_ENABLE_MULTITHREAD)
++    find_package(Threads REQUIRED)
++    target_compile_definitions(hdiffpatch_options INTERFACE ZSTD_MULTITHREAD=1 _IS_USED_MULTITHREAD=1)
++    target_link_libraries(hdiffpatch_options INTERFACE Threads::Threads)
++else ()
++    target_compile_definitions(hdiffpatch_options INTERFACE Z7_ST _IS_USED_MULTITHREAD=0)
++endif ()
++
++set(HDIFFPATCH_HPATCH_SOURCE_KEYS
++        libHDiffPatch/HPatch/patch
++        libHDiffPatch/HDiff/private_diff/limit_mem_diff/adler_roll
++        file_for_patch)
++
++if (HDIFFPATCH_ENABLE_MULTITHREAD)
++    list(APPEND HDIFFPATCH_HPATCH_SOURCE_KEYS
++            libHDiffPatch/HPatch/hpatch_mt/_hcache_old_mt
++            libHDiffPatch/HPatch/hpatch_mt/_hcache_window_old_mt
++            libHDiffPatch/HPatch/hpatch_mt/_hinput_mt
++            libHDiffPatch/HPatch/hpatch_mt/_houtput_mt
++            libHDiffPatch/HPatch/hpatch_mt/_hpatch_mt
++            libHDiffPatch/HPatch/hpatch_mt/hpatch_mt
++            libParallel/parallel_import_c)
++endif ()
++
++if (HDIFFPATCH_ENABLE_DIR_DIFF)
++    list(APPEND HDIFFPATCH_HPATCH_SOURCE_KEYS
++            dirDiffPatch/dir_patch/dir_patch
++            dirDiffPatch/dir_patch/res_handle_limit
++            dirDiffPatch/dir_patch/ref_stream
++            dirDiffPatch/dir_patch/new_stream
++            dirDiffPatch/dir_patch/dir_patch_tools
++            dirDiffPatch/dir_patch/new_dir_output)
++endif ()
++
++if (HDIFFPATCH_ENABLE_BSDIFF)
++    list(APPEND HDIFFPATCH_HPATCH_SOURCE_KEYS bsdiff_wrapper/bspatch_wrapper)
++endif ()
++
++set(HDIFFPATCH_HDIFF_SOURCE_KEYS
++        hdiffz_import_patch
++        libHDiffPatch/HPatchLite/hpatch_lite
++        libHDiffPatch/HDiff/diff
++        libHDiffPatch/HDiff/private_diff/match_block
++        libHDiffPatch/HDiff/private_diff/bytes_rle
++        libHDiffPatch/HDiff/private_diff/suffix_string
++        libHDiffPatch/HDiff/private_diff/compress_detect
++        libHDiffPatch/HDiff/private_diff/limit_mem_diff/digest_matcher
++        libHDiffPatch/HDiff/private_diff/limit_mem_diff/stream_serialize
++        libHDiffPatch/HDiff/private_diff/libdivsufsort/divsufsort64
++        libHDiffPatch/HDiff/private_diff/libdivsufsort/divsufsort
++        libHDiffPatch/HDiff/private_diff/window_diff/window_matcher
++        libHDiffPatch/HDiff/private_diff/window_diff/covers_range
++        dirDiffPatch/dir_diff/dir_diff_tools)
++
++if (HDIFFPATCH_ENABLE_DIR_DIFF)
++    list(APPEND HDIFFPATCH_HDIFF_SOURCE_KEYS
++            dirDiffPatch/dir_diff/dir_diff
++            dirDiffPatch/dir_diff/dir_manifest)
++endif ()
++
++if (HDIFFPATCH_ENABLE_BSDIFF)
++    list(APPEND HDIFFPATCH_HDIFF_SOURCE_KEYS bsdiff_wrapper/bsdiff_wrapper)
++endif ()
++
++if (HDIFFPATCH_ENABLE_MULTITHREAD)
++    list(APPEND HDIFFPATCH_HDIFF_SOURCE_KEYS
++            libParallel/parallel_channel
++            compress_parallel)
++endif ()
++
++set(HDIFFPATCH_HSYNC_SOURCE_KEYS)
++if (HDIFFPATCH_ENABLE_HSYNC_SOURCES)
++    list(APPEND HDIFFPATCH_HSYNC_SOURCE_KEYS
++            libHDiffPatch/HDiff/private_diff/match_inplace
++            libhsync/sync_client/dir_sync_client
++            libhsync/sync_client/match_in_old
++            libhsync/sync_client/sync_client
++            libhsync/sync_client/sync_diff_data
++            libhsync/sync_client/sync_info_client
++            libhsync/sync_make/dir_sync_make
++            libhsync/sync_make/match_in_new
++            libhsync/sync_make/sync_info_make
++            libhsync/sync_make/sync_make)
++endif ()
++
++if (HDIFFPATCH_ENABLE_BZIP2)
++    target_compile_definitions(hdiffpatch_options INTERFACE _CompressPlugin_bz2)
++    find_package(BZip2 REQUIRED)
++    target_link_libraries(hdiffpatch_options INTERFACE BZip2::BZip2)
++endif ()
++
++if (HDIFFPATCH_ENABLE_ZLIB)
++    target_compile_definitions(hdiffpatch_options INTERFACE _CompressPlugin_zlib)
++    if (HDIFFPATCH_ENABLE_DIR_DIFF)
++        target_compile_definitions(hdiffpatch_options INTERFACE _ChecksumPlugin_crc32)
++    endif ()
++
++    find_package(ZLIB REQUIRED)
++    target_link_libraries(hdiffpatch_options INTERFACE ZLIB::ZLIB)
++endif ()
++
++if (HDIFFPATCH_ENABLE_LIBDEFLATE)
++    target_compile_definitions(hdiffpatch_options INTERFACE
++            _CompressPlugin_ldef
++            _CompressPlugin_ldef_is_use_zlib=$<IF:$<BOOL:${HDIFFPATCH_ENABLE_ZLIB}>,1,0>)
++
++    find_package(libdeflate REQUIRED)
++    target_link_libraries(hdiffpatch_options INTERFACE libdeflate::libdeflate)
++endif ()
++
++if (HDIFFPATCH_ENABLE_DIR_DIFF AND HDIFFPATCH_ENABLE_MD5)
++    target_compile_definitions(hdiffpatch_options INTERFACE _ChecksumPlugin_md5)
++    find_package(LibMD5 REQUIRED)
++    target_link_libraries(hdiffpatch_options INTERFACE LibMD5::LibMD5)
++endif ()
++
++if (HDIFFPATCH_ENABLE_DIR_DIFF AND HDIFFPATCH_ENABLE_XXHASH)
++    target_compile_definitions(hdiffpatch_options INTERFACE _ChecksumPlugin_xxh3 _ChecksumPlugin_xxh128)
++    find_package(xxHash REQUIRED)
++    target_link_libraries(hdiffpatch_options INTERFACE xxHash::xxhash)
++endif ()
++
++if (HDIFFPATCH_ENABLE_LZMA)
++    target_compile_definitions(hdiffpatch_options INTERFACE _CompressPlugin_lzma _CompressPlugin_lzma2)
++    if (HDIFFPATCH_ENABLE_VCDIFF)
++        target_compile_definitions(hdiffpatch_options INTERFACE _CompressPlugin_7zXZ)
++        if (HDIFFPATCH_USE_CRC_EMU)
++            target_compile_definitions(hdiffpatch_options INTERFACE USE_CRC_EMU)
++        endif ()
++    endif ()
++
++    find_package(LibLZMA REQUIRED)
++    target_link_libraries(hdiffpatch_options INTERFACE LibLZMA::LibLZMA)
++endif ()
++
++if (HDIFFPATCH_ENABLE_VCDIFF)
++    list(APPEND HDIFFPATCH_HPATCH_SOURCE_KEYS vcdiff_wrapper/vcpatch_wrapper)
++    list(APPEND HDIFFPATCH_HDIFF_SOURCE_KEYS vcdiff_wrapper/vcdiff_wrapper)
++endif ()
++
++if (HDIFFPATCH_ENABLE_ZSTD)
++    target_compile_definitions(hdiffpatch_options INTERFACE _CompressPlugin_zstd)
++    find_package(zstd REQUIRED)
++    target_link_libraries(hdiffpatch_options INTERFACE zstd::libzstd_static)
++endif ()
++
++hdp_resolve_sources(HDIFFPATCH_HPATCH_SOURCES ${HDIFFPATCH_HPATCH_SOURCE_KEYS})
++hdp_resolve_sources(HDIFFPATCH_HDIFF_SOURCES ${HDIFFPATCH_HDIFF_SOURCE_KEYS})
++if (HDIFFPATCH_HSYNC_SOURCE_KEYS)
++    hdp_resolve_sources(HDIFFPATCH_HSYNC_SOURCES ${HDIFFPATCH_HSYNC_SOURCE_KEYS})
++endif ()
++
++add_library(hpatchz_objects OBJECT ${HDIFFPATCH_HPATCH_SOURCES})
++target_link_libraries(hpatchz_objects PUBLIC hdiffpatch_options)
++hdp_apply_common_compile_settings(hpatchz_objects)
++
++add_library(hdiff_objects OBJECT ${HDIFFPATCH_HDIFF_SOURCES})
++target_link_libraries(hdiff_objects PUBLIC hdiffpatch_options)
++hdp_apply_common_compile_settings(hdiff_objects)
++
++if (HDIFFPATCH_HSYNC_SOURCES)
++    add_library(hsync_objects OBJECT ${HDIFFPATCH_HSYNC_SOURCES})
++    target_link_libraries(hsync_objects PUBLIC hdiffpatch_options)
++    hdp_apply_common_compile_settings(hsync_objects)
++endif ()
++
++set(HDIFFPATCH_ARCHIVE_OBJECTS
++        $<TARGET_OBJECTS:hpatchz_objects>
++        $<TARGET_OBJECTS:hdiff_objects>)
++if (HDIFFPATCH_HSYNC_SOURCES)
++    list(APPEND HDIFFPATCH_ARCHIVE_OBJECTS $<TARGET_OBJECTS:hsync_objects>)
++endif ()
++
++add_library(hdiffpatch STATIC ${HDIFFPATCH_ARCHIVE_OBJECTS})
++target_link_libraries(hdiffpatch PUBLIC hdiffpatch_options)
++hdp_apply_common_compile_settings(hdiffpatch)
++add_library(HDiffPatch::hdiffpatch ALIAS hdiffpatch)
++
++set_target_properties(hdiffpatch PROPERTIES
++        INTERFACE_MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}")
++
++if (HDIFFPATCH_BUILD_TOOLS)
++    hdp_resolve_sources(HDIFFPATCH_HPATCHZ_MAIN "hpatchz")
++    add_executable(hpatchz ${HDIFFPATCH_HPATCHZ_MAIN} $<TARGET_OBJECTS:hpatchz_objects>)
++    target_link_libraries(hpatchz PRIVATE hdiffpatch_options)
++    hdp_apply_common_compile_settings(hpatchz)
++    hdp_apply_common_link_settings(hpatchz)
++
++    hdp_resolve_sources(HDIFFPATCH_HDIFFZ_MAIN "hdiffz")
++    add_executable(hdiffz ${HDIFFPATCH_HDIFFZ_MAIN})
++    target_link_libraries(hdiffz PRIVATE hdiffpatch)
++    hdp_apply_common_compile_settings(hdiffz)
++    hdp_apply_common_link_settings(hdiffz)
++
++    if (NOT MSVC AND HDIFFPATCH_STATIC_CXX_RUNTIME_GNU)
++        target_link_options(hdiffz PRIVATE -static-libstdc++)
++    endif ()
++
++    set(_hdp_manifest "${HDIFFPATCH_ROOT}/builds/vc/longPathAware.exe.manifest")
++    if (MSVC AND EXISTS "${_hdp_manifest}")
++        target_link_options(hpatchz PRIVATE "/MANIFEST:NO" "/MANIFEST:EMBED" "/MANIFESTINPUT:${_hdp_manifest}")
++        target_link_options(hdiffz PRIVATE "/MANIFEST:NO" "/MANIFEST:EMBED" "/MANIFESTINPUT:${_hdp_manifest}")
++    endif ()
++
++    install(TARGETS hpatchz hdiffz RUNTIME DESTINATION bin)
++endif ()
++
++if (HDIFFPATCH_BUILD_TESTS)
++    hdp_resolve_sources(HDIFFPATCH_UNIT_TEST_MAIN "test/unit_test")
++    add_executable(unit_test ${HDIFFPATCH_UNIT_TEST_MAIN})
++    target_link_libraries(unit_test PRIVATE hdiffpatch)
++    hdp_apply_common_compile_settings(unit_test)
++    hdp_apply_common_link_settings(unit_test)
++    if (NOT MSVC AND HDIFFPATCH_STATIC_CXX_RUNTIME_GNU)
++        target_link_options(unit_test PRIVATE -static-libstdc++)
++    endif ()
++    enable_testing()
++    add_test(NAME hdiffpatch_unit_test COMMAND unit_test)
++endif ()
++
++install(TARGETS hdiffpatch ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
++include(cmake/Packaging.cmake)
+Index: cmake/FindBZip2.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/FindBZip2.cmake b/cmake/FindBZip2.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/FindBZip2.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,55 @@
++# Configure sisong's bzip2 fork. There is also a conan recipe in https://conan.io/center/recipes/bzip2, and a spiritual
++# successor of that library in https://conan.io/center/recipes/bzip3. Sisong made some changes to the original code of
++# bzip2, so we would need to apply those patches if we were to use it (hard to tell how much he/she changed).
++
++include(FetchContent)
++include(GNUInstallDirs)
++
++# Configuration — you can override the repo or commit via cache vars
++set(BZIP2_GIT_REPOSITORY "https://github.com/Seclous/bzip2.git"
++        CACHE STRING "Git repository for BZip2")
++set(BZIP2_GIT_TAG "fbc4b11da543753b3b803e5546f56e26ec90c2a7"
++        CACHE STRING "Git commit or tag for BZip2")
++
++message(STATUS "Fetching BZip2 from ${BZIP2_GIT_REPOSITORY} at ${BZIP2_GIT_TAG}")
++
++FetchContent_Declare(
++        bzip2
++        GIT_REPOSITORY ${BZIP2_GIT_REPOSITORY}
++        GIT_TAG ${BZIP2_GIT_TAG}
++)
++
++FetchContent_MakeAvailable(bzip2)
++
++if (NOT TARGET BZip2::BZip2)
++    # Manually define the target, since the fetched project has no CMakeLists.txt
++    set(bzip2_SOURCE_DIR "${bzip2_SOURCE_DIR}" CACHE INTERNAL "")
++    file(GLOB BZIP2_SOURCES
++            "${bzip2_SOURCE_DIR}/blocksort.c"
++            "${bzip2_SOURCE_DIR}/bzlib.c"
++            "${bzip2_SOURCE_DIR}/compress.c"
++            "${bzip2_SOURCE_DIR}/crctable.c"
++            "${bzip2_SOURCE_DIR}/decompress.c"
++            "${bzip2_SOURCE_DIR}/huffman.c"
++            "${bzip2_SOURCE_DIR}/randtable.c"
++    )
++
++    if (NOT BZIP2_SOURCES)
++        message(FATAL_ERROR "Failed to locate BZip2 sources in ${bzip2_SOURCE_DIR}")
++    endif ()
++
++    add_library(BZip2 STATIC ${BZIP2_SOURCES})
++    add_library(BZip2::BZip2 ALIAS BZip2)
++    target_include_directories(BZip2
++            PUBLIC
++            $<BUILD_INTERFACE:${bzip2_SOURCE_DIR}>
++            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/bzip2>
++    )
++    target_compile_definitions(BZip2 PRIVATE _FILE_OFFSET_BITS=64)
++
++    if (MSVC)
++        set_target_properties(BZip2 PROPERTIES
++                MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}"
++        )
++    endif ()
++endif ()
+\ No newline at end of file
+Index: cmake/FindLibLZMA.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/FindLibLZMA.cmake b/cmake/FindLibLZMA.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/FindLibLZMA.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,102 @@
++# Configure sisong's LibLZMA fork. There is a conan recipe in https://conan.io/center/recipes/lzma_sdk, but sisong
++# made some changes to the original code, so we would have to apply patches if we were to use it.
++
++include(FetchContent)
++include(GNUInstallDirs)
++
++set(LZMA_GIT_REPOSITORY "https://github.com/Seclous/lzma.git"
++        CACHE STRING "Git repository for lzma")
++set(LZMA_GIT_TAG "44809544b95bbf2dccec75d954657ff76fc349ff"
++        CACHE STRING "Git tag or commit for lzma")
++
++message(STATUS "Fetching LZMA from ${LZMA_GIT_REPOSITORY} at ${LZMA_GIT_TAG}")
++
++FetchContent_Declare(
++        lzma
++        GIT_REPOSITORY ${LZMA_GIT_REPOSITORY}
++        GIT_TAG ${LZMA_GIT_TAG}
++)
++
++FetchContent_MakeAvailable(lzma)
++
++# Define only once
++if (NOT TARGET LibLZMA::LibLZMA)
++    set(LZMA_C_ROOT "${lzma_SOURCE_DIR}/C")
++
++    # ---- Base sources (always compiled) ----
++    set(LZMA_SOURCES
++            "${LZMA_C_ROOT}/Alloc.c"
++            "${LZMA_C_ROOT}/CpuArch.c"
++            "${LZMA_C_ROOT}/7zStream.c"
++            "${LZMA_C_ROOT}/LzmaDec.c"
++            "${LZMA_C_ROOT}/Lzma2Dec.c"
++            "${LZMA_C_ROOT}/LzFind.c"
++            "${LZMA_C_ROOT}/LzFindOpt.c"
++            "${LZMA_C_ROOT}/LzmaEnc.c"
++            "${LZMA_C_ROOT}/Lzma2Enc.c"
++    )
++
++    # ---- Multithreading sources ----
++    if (DEFINED HDIFFPATCH_ENABLE_MULTITHREAD AND HDIFFPATCH_ENABLE_MULTITHREAD)
++        list(APPEND LZMA_SOURCES
++                "${LZMA_C_ROOT}/MtDec.c"
++                "${LZMA_C_ROOT}/Threads.c"
++                "${LZMA_C_ROOT}/LzFindMt.c"
++                "${LZMA_C_ROOT}/MtCoder.c"
++                "${LZMA_C_ROOT}/Lzma2DecMt.c"
++        )
++    endif ()
++
++    # ---- VCDIFF extras ----
++    if (DEFINED HDIFFPATCH_ENABLE_VCDIFF AND HDIFFPATCH_ENABLE_VCDIFF)
++        list(APPEND LZMA_SOURCES
++                "${LZMA_C_ROOT}/7zCrc.c"
++                "${LZMA_C_ROOT}/7zCrcOpt.c"
++                "${LZMA_C_ROOT}/Bra.c"
++                "${LZMA_C_ROOT}/Bra86.c"
++                "${LZMA_C_ROOT}/BraIA64.c"
++                "${LZMA_C_ROOT}/Delta.c"
++                "${LZMA_C_ROOT}/Sha256.c"
++                "${LZMA_C_ROOT}/Sha256Opt.c"
++                "${LZMA_C_ROOT}/Xz.c"
++                "${LZMA_C_ROOT}/XzCrc64.c"
++                "${LZMA_C_ROOT}/XzCrc64Opt.c"
++                "${LZMA_C_ROOT}/XzDec.c"
++                "${LZMA_C_ROOT}/XzEnc.c"
++        )
++    endif ()
++
++    # ---- Optional ARM64 optimizations ----
++    if (CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|ARM64")
++        if (EXISTS "${lzma_SOURCE_DIR}/Asm/arm64/LzmaDecOpt.S")
++            list(APPEND LZMA_SOURCES "${lzma_SOURCE_DIR}/Asm/arm64/LzmaDecOpt.S")
++        endif ()
++    endif ()
++
++    # ---- Create the target ----
++    add_library(LibLZMA STATIC ${LZMA_SOURCES})
++    add_library(LibLZMA::LibLZMA ALIAS LibLZMA)
++
++    target_include_directories(LibLZMA
++            PUBLIC
++            $<BUILD_INTERFACE:${LZMA_C_ROOT}>
++            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/liblzma>
++    )
++    target_compile_definitions(LibLZMA PRIVATE _FILE_OFFSET_BITS=64)
++
++    if (CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|ARM64")
++        target_compile_definitions(LibLZMA PRIVATE Z7_LZMA_DEC_OPT)
++    endif ()
++
++    # Optional: define USE_CRC_EMU only if VCDIFF enabled and requested
++    if (DEFINED HDIFFPATCH_ENABLE_VCDIFF AND HDIFFPATCH_ENABLE_VCDIFF
++            AND DEFINED HDIFFPATCH_USE_CRC_EMU AND HDIFFPATCH_USE_CRC_EMU)
++        target_compile_definitions(LibLZMA PRIVATE USE_CRC_EMU)
++    endif ()
++
++    if (MSVC)
++        set_target_properties(LibLZMA PROPERTIES
++                MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}"
++        )
++    endif ()
++endif ()
+\ No newline at end of file
+Index: cmake/FindLibMD5.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/FindLibMD5.cmake b/cmake/FindLibMD5.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/FindLibMD5.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,37 @@
++# Configure sisong's LibMD5 fork
++
++include(FetchContent)
++include(GNUInstallDirs)
++
++set(LIBMD5_GIT_REPOSITORY "https://github.com/Seclous/libmd5.git"
++        CACHE STRING "Git repository for libmd5")
++set(LIBMD5_GIT_TAG "51edeb63ec3f456f4950922c5011c326a062fbce"
++        CACHE STRING "Git commit or tag for libmd5")
++
++message(STATUS "Fetching libmd5 from ${LIBMD5_GIT_REPOSITORY} at ${LIBMD5_GIT_TAG}")
++
++FetchContent_Declare(
++        libmd5
++        GIT_REPOSITORY ${LIBMD5_GIT_REPOSITORY}
++        GIT_TAG ${LIBMD5_GIT_TAG}
++)
++
++FetchContent_MakeAvailable(libmd5)
++
++# Define a small static library manually (since repo has no CMakeLists.txt)
++if (NOT TARGET LibMD5::LibMD5)
++    file(GLOB LIBMD5_SOURCES
++            "${libmd5_SOURCE_DIR}/md5.c"
++            "${libmd5_SOURCE_DIR}/md5main.c"
++    )
++
++    add_library(LibMD5 STATIC ${LIBMD5_SOURCES})
++    add_library(LibMD5::LibMD5 ALIAS LibMD5)
++
++    target_include_directories(LibMD5
++            PUBLIC
++            $<BUILD_INTERFACE:${libmd5_SOURCE_DIR}>
++            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libmd5>
++    )
++    target_compile_definitions(LibMD5 PRIVATE _FILE_OFFSET_BITS=64)
++endif ()
+\ No newline at end of file
+Index: cmake/FindZLIB.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/FindZLIB.cmake b/cmake/FindZLIB.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/FindZLIB.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,31 @@
++# Configure sisong's ZLIB fork. There is also a conan recipe in https://conan.io/center/recipes/zlib, but sisong
++# made some changes to the original code, so we would have to apply patches if we were to use it (not too many changes
++# by the author).
++
++include(FetchContent)
++include(GNUInstallDirs)
++
++# Allow override so you can point to a fork or different commit.
++set(ZLIB_GIT_REPOSITORY "https://github.com/Seclous/zlib.git"
++        CACHE STRING "Git repository for zlib")
++set(ZLIB_GIT_TAG "323357a50daba38cedd2b766b3427f4c6d33b10f"
++        CACHE STRING "Git commit or tag for zlib")
++
++message(STATUS "Fetching zlib from ${ZLIB_GIT_REPOSITORY} at ${ZLIB_GIT_TAG}")
++
++FetchContent_Declare(
++        zlib
++        GIT_REPOSITORY ${ZLIB_GIT_REPOSITORY}
++        GIT_TAG ${ZLIB_GIT_TAG}
++)
++
++set(ZLIB_BUILD_TESTING OFF CACHE BOOL "Disable Zlib examples")
++set(ZLIB_BUILD_SHARED OFF CACHE BOOL "Enable building zlib shared library")
++
++FetchContent_MakeAvailable(zlib)
++
++# zlib’s official CMakeLists usually defines ZLIB::ZLIB already.
++# We only add the alias if it is missing.
++if (NOT TARGET ZLIB::ZLIB)
++    add_library(ZLIB::ZLIB ALIAS zlibstatic)
++endif ()
+\ No newline at end of file
+Index: cmake/Findlibdeflate.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/Findlibdeflate.cmake b/cmake/Findlibdeflate.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/Findlibdeflate.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,53 @@
++# Configure sisong's libdeflate fork. There is also a conan recipe in https://conan.io/center/recipes/libdeflate, but
++# sisong made some changes to the original code, so we would have to apply patches if we were to use it. Some of the
++# changes seem to conflict with the main libdeflate repository.
++
++
++include(FetchContent)
++include(GNUInstallDirs)
++
++set(LIBDEFLATE_GIT_REPOSITORY "https://github.com/Seclous/libdeflate.git"
++        CACHE STRING "Git repository for libdeflate")
++set(LIBDEFLATE_GIT_TAG "8f894fab60464e13ddee3846eae722216347fac1"
++        CACHE STRING "Git tag or commit for libdeflate")
++
++message(STATUS "Fetching libdeflate from ${LIBDEFLATE_GIT_REPOSITORY} at ${LIBDEFLATE_GIT_TAG}")
++
++FetchContent_Declare(
++        libdeflate
++        GIT_REPOSITORY ${LIBDEFLATE_GIT_REPOSITORY}
++        GIT_TAG ${LIBDEFLATE_GIT_TAG}
++)
++
++set(LIBDEFLATE_BUILD_STATIC_LIB ON CACHE BOOL "Build the static library" FORCE)
++set(LIBDEFLATE_BUILD_SHARED_LIB OFF CACHE BOOL "Build the shared library" FORCE)
++set(LIBDEFLATE_BUILD_GZIP OFF CACHE BOOL "Build gzip tools" FORCE)
++set(LIBDEFLATE_BUILD_TESTS OFF CACHE BOOL "Build the test programs" FORCE)
++
++FetchContent_MakeAvailable(libdeflate)
++
++if (TARGET libdeflate_static)
++    # Adjust the public header path to point to the correct source
++    set_target_properties(libdeflate_static PROPERTIES
++            PUBLIC_HEADER "${libdeflate_SOURCE_DIR}/libdeflate.h"
++    )
++endif ()
++
++# Normalize to a consistent alias: libdeflate::libdeflate
++# The project may define one of several possible targets.
++# We should always find libdeflate_static, but I leave the other
++# options here for completeness
++if (TARGET libdeflate_static)
++    add_library(libdeflate::libdeflate ALIAS libdeflate_static)
++
++elseif (TARGET libdeflate_shared)
++    add_library(libdeflate::libdeflate ALIAS libdeflate_shared)
++
++elseif (TARGET libdeflate)
++    add_library(libdeflate::libdeflate ALIAS libdeflate)
++
++else ()
++    message(FATAL_ERROR
++            "FetchLibdeflate.cmake: could not find any target (libdeflate_static, libdeflate_shared, or libdeflate). "
++            "The fetched project may have changed its structure.")
++endif ()
+\ No newline at end of file
+Index: cmake/FindxxHash.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/FindxxHash.cmake b/cmake/FindxxHash.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/FindxxHash.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,38 @@
++# Configure xxHash. We are using the release branch on a specific commit. There is also a conan recipe of this code
++# in https://conan.io/center/recipes/xxhash. See if we can eventually migrate to this (i.e., depends on the changes with
++# respect to the latest version in conan center).
++
++include(FetchContent)
++include(GNUInstallDirs)
++
++set(XXHASH_GIT_REPOSITORY "https://github.com/Cyan4973/xxHash.git"
++        CACHE STRING "Git repository for xxHash")
++set(XXHASH_GIT_TAG "e626a72bc2321cd320e953a0ccf1584cad60f363"
++        CACHE STRING "Git tag or commit for xxHash")
++
++message(STATUS "Fetching xxHash from ${XXHASH_GIT_REPOSITORY} at ${XXHASH_GIT_TAG}")
++
++# Tell the unofficial cmake to skip unneeded builds
++set(XXHASH_BUILD_XXHSUM OFF CACHE BOOL "Disable building xxhsum CLI" FORCE)
++set(XXHASH_BUILD_ENABLE_INLINE_API OFF CACHE BOOL "Disable inline xxHash API" FORCE)
++set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static library" FORCE)
++set(DISPATCH OFF CACHE BOOL "Disable dispatch mode" FORCE)
++
++FetchContent_Declare(
++        xxhash
++        GIT_REPOSITORY ${XXHASH_GIT_REPOSITORY}
++        GIT_TAG ${XXHASH_GIT_TAG}
++)
++
++FetchContent_MakeAvailable(xxhash)
++
++# The source dir will now exist, but xxHash has no root-level CMakeLists.txt.
++# We need to manually add the cmake_unofficial subproject if it hasn't already been added.
++if (NOT TARGET xxhash AND EXISTS "${xxhash_SOURCE_DIR}/cmake_unofficial/CMakeLists.txt")
++    add_subdirectory("${xxhash_SOURCE_DIR}/cmake_unofficial" "${xxhash_BINARY_DIR}" EXCLUDE_FROM_ALL)
++endif ()
++
++# Create a canonical alias for downstream use
++if (TARGET xxhash AND NOT TARGET xxHash::xxhash)
++    add_library(xxHash::xxhash ALIAS xxhash)
++endif ()
+\ No newline at end of file
+Index: cmake/Findzstd.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/Findzstd.cmake b/cmake/Findzstd.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/Findzstd.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,101 @@
++# Configure sisong's zstd fork. There is also a conan recipe in https://conan.io/center/recipes/zstd, but sisong
++# made some changes to the original code, so we would have to apply patches if we were to use it (not too many changes
++# by the author).
++
++include(FetchContent)
++include(GNUInstallDirs)
++
++set(ZSTD_GIT_REPOSITORY "https://github.com/Seclous/zstd.git"
++        CACHE STRING "Git repository for zstd")
++set(ZSTD_GIT_TAG "68c88c7c7ad22b5e6882a5296ef96d27dc8750c4"
++        CACHE STRING "Git commit or tag for zstd")
++
++message(STATUS "Fetching Zstd from ${ZSTD_GIT_REPOSITORY} at ${ZSTD_GIT_TAG}")
++
++FetchContent_Declare(
++        zstd
++        GIT_REPOSITORY ${ZSTD_GIT_REPOSITORY}
++        GIT_TAG ${ZSTD_GIT_TAG}
++)
++
++FetchContent_MakeAvailable(zstd)
++
++if (NOT TARGET zstd::libzstd_static AND NOT TARGET zstd::libzstd_shared AND NOT TARGET zstd::zstd AND NOT TARGET Zstd::Zstd)
++    set(ZSTD_LIB_ROOT "${zstd_SOURCE_DIR}/lib")
++    set(ZSTD_COMMON_DIR "${ZSTD_LIB_ROOT}/common")
++    set(ZSTD_COMPRESS_DIR "${ZSTD_LIB_ROOT}/compress")
++    set(ZSTD_DECOMPRESS_DIR "${ZSTD_LIB_ROOT}/decompress")
++
++    # ---------------- Base sources (common + decompress) ----------------
++    set(ZSTD_SOURCES
++            "${ZSTD_COMMON_DIR}/debug.c"
++            "${ZSTD_COMMON_DIR}/entropy_common.c"
++            "${ZSTD_COMMON_DIR}/error_private.c"
++            "${ZSTD_COMMON_DIR}/fse_decompress.c"
++            "${ZSTD_COMMON_DIR}/xxhash.c"
++            "${ZSTD_COMMON_DIR}/zstd_common.c"
++
++            "${ZSTD_DECOMPRESS_DIR}/huf_decompress.c"
++            "${ZSTD_DECOMPRESS_DIR}/zstd_ddict.c"
++            "${ZSTD_DECOMPRESS_DIR}/zstd_decompress.c"
++            "${ZSTD_DECOMPRESS_DIR}/zstd_decompress_block.c"
++
++            "${ZSTD_COMPRESS_DIR}/fse_compress.c"
++            "${ZSTD_COMPRESS_DIR}/hist.c"
++            "${ZSTD_COMPRESS_DIR}/huf_compress.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_compress.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_compress_literals.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_compress_sequences.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_compress_superblock.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_preSplit.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_double_fast.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_fast.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_lazy.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_ldm.c"
++            "${ZSTD_COMPRESS_DIR}/zstd_opt.c"
++    )
++
++    # ---------------- Multithread support ----------------
++    if (DEFINED HDIFFPATCH_ENABLE_MULTITHREAD AND HDIFFPATCH_ENABLE_MULTITHREAD)
++        list(APPEND ZSTD_SOURCES
++                "${ZSTD_COMMON_DIR}/pool.c"
++                "${ZSTD_COMMON_DIR}/threading.c"
++                "${ZSTD_COMPRESS_DIR}/zstdmt_compress.c"
++        )
++    endif ()
++
++    # ---------------- Create Static Target ----------------
++    add_library(zstd_static STATIC ${ZSTD_SOURCES})
++    add_library(zstd::libzstd_static ALIAS zstd_static)
++
++    target_include_directories(zstd_static
++            PUBLIC
++            $<BUILD_INTERFACE:${ZSTD_LIB_ROOT}>
++            $<BUILD_INTERFACE:${ZSTD_COMMON_DIR}>
++            $<BUILD_INTERFACE:${ZSTD_COMPRESS_DIR}>
++            $<BUILD_INTERFACE:${ZSTD_DECOMPRESS_DIR}>
++            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/zstd>
++    )
++
++    target_compile_definitions(zstd_static PRIVATE
++            ZSTD_HAVE_WEAK_SYMBOLS=0
++            ZSTD_TRACE=0
++            ZSTD_DISABLE_ASM=1
++            ZSTDLIB_HIDDEN=
++            ZSTDLIB_VISIBLE=
++            ZDICTLIB_VISIBLE=
++            ZSTDERRORLIB_VISIBLE=
++            ZSTD_LIB_DEPRECATED=0
++            ZSTD_STRIP_ERROR_STRINGS=1
++    )
++
++    # Set symbol visibility off for a smaller library.
++    target_compile_options(zstd_static PRIVATE -fvisibility=hidden)
++
++    if (MSVC)
++        set_target_properties(zstd_static PROPERTIES
++                MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}"
++        )
++    endif ()
++
++endif ()
+\ No newline at end of file
+Index: cmake/HDiffPatchConfig.cmake.in
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/HDiffPatchConfig.cmake.in b/cmake/HDiffPatchConfig.cmake.in
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/HDiffPatchConfig.cmake.in	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,48 @@
++@PACKAGE_INIT@
++
++# Make sure this directory is searched for imported targets
++include("${CMAKE_CURRENT_LIST_DIR}/HDiffPatchTargets.cmake")
++
++# Propagate dependency requirements
++include(CMakeFindDependencyMacro)
++
++# -----------------------------------------------------------------------------
++# Exported build configuration options
++# These record how HDiffPatch was built so consumers can adapt accordingly.
++# -----------------------------------------------------------------------------
++set(HDIFFPATCH_BUILD_TOOLS "@HDIFFPATCH_BUILD_TOOLS@")
++set(HDIFFPATCH_BUILD_TESTS "@HDIFFPATCH_BUILD_TESTS@")
++set(HDIFFPATCH_ENABLE_DIR_DIFF "@HDIFFPATCH_ENABLE_DIR_DIFF@")
++set(HDIFFPATCH_ENABLE_MULTITHREAD "@HDIFFPATCH_ENABLE_MULTITHREAD@")
++set(HDIFFPATCH_ENABLE_VCDIFF "@HDIFFPATCH_ENABLE_VCDIFF@")
++set(HDIFFPATCH_ENABLE_BSDIFF "@HDIFFPATCH_ENABLE_BSDIFF@")
++set(HDIFFPATCH_ENABLE_MD5 "@HDIFFPATCH_ENABLE_MD5@")
++set(HDIFFPATCH_ENABLE_XXHASH "@HDIFFPATCH_ENABLE_XXHASH@")
++set(HDIFFPATCH_ENABLE_LOGGING "@HDIFFPATCH_ENABLE_LOGGING@")
++set(HDIFFPATCH_ENABLE_ATOMIC_U64 "@HDIFFPATCH_ENABLE_ATOMIC_U64@")
++set(HDIFFPATCH_ENABLE_ARM64_LZMA_ASM "@HDIFFPATCH_ENABLE_ARM64_LZMA_ASM@")
++set(HDIFFPATCH_USE_CRC_EMU "@HDIFFPATCH_USE_CRC_EMU@")
++set(HDIFFPATCH_MIN_SIZE "@HDIFFPATCH_MIN_SIZE@")
++set(HDIFFPATCH_NO_PIE "@HDIFFPATCH_NO_PIE@")
++set(HDIFFPATCH_STATIC_C_RUNTIME_GNU "@HDIFFPATCH_STATIC_C_RUNTIME_GNU@")
++set(HDIFFPATCH_STATIC_CXX_RUNTIME_GNU "@HDIFFPATCH_STATIC_CXX_RUNTIME_GNU@")
++set(HDIFFPATCH_MSVC_STATIC_RUNTIME "@HDIFFPATCH_MSVC_STATIC_RUNTIME@")
++set(HDIFFPATCH_ENABLE_HSYNC_SOURCES "@HDIFFPATCH_ENABLE_HSYNC_SOURCES@")
++set(HDIFFPATCH_ENABLE_BZIP2 "@HDIFFPATCH_ENABLE_BZIP2@")
++set(HDIFFPATCH_ENABLE_LIBDEFLATE "@HDIFFPATCH_ENABLE_LIBDEFLATE@")
++set(HDIFFPATCH_ENABLE_ZLIB "@HDIFFPATCH_ENABLE_ZLIB@")
++set(HDIFFPATCH_ENABLE_LZMA "@HDIFFPATCH_ENABLE_LZMA@")
++set(HDIFFPATCH_ENABLE_ZSTD "@HDIFFPATCH_ENABLE_ZSTD@")
++
++# Only bring in Threads if this build used it
++if(HDIFFPATCH_ENABLE_MULTITHREAD)
++    find_dependency(Threads)
++endif()
++
++# Provide convenience variables (optional)
++set(HDIFFPATCH_INCLUDE_DIRS "@CMAKE_INSTALL_INCLUDEDIR@")
++set(HDIFFPATCH_LIBRARIES HDiffPatch::hdiffpatch)
++
++message(STATUS "HDiffPatchConfig loaded (version @PROJECT_VERSION@)")
++
++check_required_components(@PROJECT_NAME@)
+\ No newline at end of file
+Index: cmake/Packaging.cmake
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmake/Packaging.cmake b/cmake/Packaging.cmake
+new file mode 100644
+--- /dev/null	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
++++ b/cmake/Packaging.cmake	(revision d6d72c146317afe0d532173a41e995b52e1fa743)
+@@ -0,0 +1,148 @@
++include(CMakePackageConfigHelpers)
++
++# Definitions of CMAKE_INSTALL_LIBDIR, CMAKE_INSTALL_INCLUDEDIR and others
++include(GNUInstallDirs)
++
++set(INSTALL_CONFIGDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HDiffPatch")
++
++# Note that it is not CMAKE_INSTALL_PREFIX we are checking here
++if (DEFINED CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
++    message(
++            STATUS
++            "CMAKE_INSTALL_PREFIX is not set\n"
++            "Default value: ${CMAKE_INSTALL_PREFIX}\n"
++            "Will set it to ${CMAKE_SOURCE_DIR}/install"
++    )
++    set(CMAKE_INSTALL_PREFIX
++            "${CMAKE_SOURCE_DIR}/install"
++            CACHE PATH "Where the library will be installed to" FORCE
++    )
++else ()
++    message(
++            STATUS
++            "CMAKE_INSTALL_PREFIX was already set\n"
++            "Current value: ${CMAKE_INSTALL_PREFIX}"
++    )
++endif ()
++
++# Export the targets (the “interface” to consumers)
++install(
++        TARGETS hdiffpatch hdiffpatch_options
++        EXPORT HDiffPatchTargets
++        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
++)
++
++install(
++        DIRECTORY
++        ${HDIFFPATCH_ROOT}/libHDiffPatch/
++        ${HDIFFPATCH_ROOT}/dirDiffPatch/
++        ${HDIFFPATCH_ROOT}/libhsync/
++        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/HDiffPatch
++        FILES_MATCHING PATTERN "*.h"
++)
++
++if (HDIFFPATCH_ENABLE_DIR_DIFF AND HDIFFPATCH_ENABLE_XXHASH)
++    install(
++            TARGETS xxhash
++            EXPORT HDiffPatchTargets
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
++    )
++endif ()
++
++if (HDIFFPATCH_ENABLE_ZLIB)
++    install(
++            TARGETS zlibstatic
++            EXPORT HDiffPatchTargets
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
++    )
++endif ()
++
++if (HDIFFPATCH_ENABLE_LIBDEFLATE)
++    install(
++            TARGETS libdeflate_static
++            EXPORT HDiffPatchTargets
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
++    )
++endif ()
++
++if (HDIFFPATCH_ENABLE_BZIP2)
++    install(
++            TARGETS BZip2
++            EXPORT HDiffPatchTargets
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/bzip2
++    )
++
++    install(
++            FILES "${bzip2_SOURCE_DIR}/bzlib.h"
++            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/bzip2
++    )
++endif ()
++
++if (HDIFFPATCH_ENABLE_MD5)
++    install(
++            TARGETS LibMD5
++            EXPORT HDiffPatchTargets
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libmd5
++    )
++
++    install(
++            FILES "${libmd5_SOURCE_DIR}/md5.h"
++            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/libmd5
++    )
++endif ()
++
++if (HDIFFPATCH_ENABLE_LZMA)
++    install(
++            TARGETS LibLZMA
++            EXPORT HDiffPatchTargets
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/liblzma
++    )
++
++    install(
++            DIRECTORY ${LZMA_C_ROOT}/
++            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/liblzma
++            FILES_MATCHING PATTERN "*.h"
++    )
++endif ()
++
++if (HDIFFPATCH_ENABLE_ZSTD)
++    install(
++            TARGETS zstd_static
++            EXPORT HDiffPatchTargets
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/zstd
++    )
++
++    install(
++            DIRECTORY ${ZSTD_LIB_ROOT}/
++            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/zstd
++            FILES_MATCHING PATTERN "*.h"
++    )
++endif ()
++
++# Install the export target description
++install(
++        EXPORT HDiffPatchTargets
++        FILE HDiffPatchTargets.cmake
++        NAMESPACE HDiffPatch::
++        DESTINATION ${INSTALL_CONFIGDIR}
++)
++
++# Generate and install Config + Version files
++configure_package_config_file(
++        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/HDiffPatchConfig.cmake.in"
++        "${CMAKE_CURRENT_BINARY_DIR}/HDiffPatchConfig.cmake"
++        INSTALL_DESTINATION ${INSTALL_CONFIGDIR}
++)
++
++write_basic_package_version_file(
++        "${CMAKE_CURRENT_BINARY_DIR}/HDiffPatchConfigVersion.cmake"
++        VERSION ${PROJECT_VERSION}
++        COMPATIBILITY SameMajorVersion
++)
++
++install(
++        FILES
++        "${CMAKE_CURRENT_BINARY_DIR}/HDiffPatchConfig.cmake"
++        "${CMAKE_CURRENT_BINARY_DIR}/HDiffPatchConfigVersion.cmake"
++        DESTINATION ${INSTALL_CONFIGDIR}
++)
+\ No newline at end of file
