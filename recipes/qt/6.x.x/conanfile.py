@@ -410,7 +410,7 @@ class QtConan(ConanFile):
         if self.options.qtwayland:
             self.requires("wayland/1.22.0")
         if self.options.with_brotli:
-            self.requires("brotli/1.1.0")
+            self.requires("brotli/[>=1.1 <1.3]")
         if self.options.get_safe("qtwebengine") and self.settings.os == "Linux":
             self.requires("expat/[>=2.6.2 <3]")
             self.requires("opus/1.4")
