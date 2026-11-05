@@ -426,7 +426,7 @@ class QtConan(ConanFile):
             self.requires("gstreamer/1.19.2")
             self.requires("gst-plugins-base/1.19.2")
         if self.options.get_safe("with_ffmpeg", False):
-            self.requires("ffmpeg/[>=7.1.1 <8]")
+            self.requires("ffmpeg/[>=7.1.1 <10]")
         if self.options.get_safe("with_pulseaudio", False):
             self.requires("pulseaudio/14.2")
         if self.options.with_dbus:
