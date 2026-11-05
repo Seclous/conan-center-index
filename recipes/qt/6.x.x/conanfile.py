@@ -435,7 +435,7 @@ class QtConan(ConanFile):
             self.requires("krb5/1.21.2")
         if self.options.get_safe("with_md4c", False):
             # INFO: md4c 0.6.0 breaks the Qt build: https://github.com/mity/md4c/issues/434
-            self.requires("md4c/[>=0.4.8 <0.6]") 
+            self.requires("md4c/[>=0.4.8 <0.6]")
 
     def build_requirements(self):
         self.tool_requires("cmake/[>=3.25]")
@@ -677,7 +677,7 @@ class QtConan(ConanFile):
         # hard-disable the WebP plugin regardless of what packages are present, it clashes with ffmpeg's webp use.
         tc.cache_variables["FEATURE_webp"] = "OFF"
         tc.cache_variables["QT_FEATURE_webp"] = "OFF"
-        
+
         # hack: set required vaapi version hardcoded to 2, because auto-detection doesn't (always?) work properly.
         tc.cache_variables["VAAPI_SUFFIX"] = "2"
         ###################################
@@ -688,7 +688,7 @@ class QtConan(ConanFile):
             # moc.exe, uic.exe, etc are built first and used subsequently during the build
             # and have DLL dependencies through QtCore library - copy the DLLs so that they
             # are found at runtime to avoid exposing the "host" runenv to the build environment
-            dest_folder = os.path.join(self.build_folder, "qtbase", "bin") 
+            dest_folder = os.path.join(self.build_folder, "qtbase", "bin")
             for dep in self.dependencies.host.values():
                 for bindir in dep.cpp_info.bindirs:
                     copy(self, pattern="*.dll", src=bindir, dst=dest_folder, keep_path=False)
@@ -1912,7 +1912,7 @@ class QtConan(ConanFile):
             libs = getattr(comp, "libs", None)
             if not libs:
                 continue
-                
+
 
             keep, missing = [], []
             for l in libs:
