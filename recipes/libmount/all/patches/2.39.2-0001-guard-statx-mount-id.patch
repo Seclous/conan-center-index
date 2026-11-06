@@ -1,0 +1,16 @@
+Guard the mount-ID lookup using the statx headers selected by libmount.
+Some libc headers expose statx without mount IDs even when the kernel
+headers provide them. Keep the existing kernel-header syscall fallback.
+
+Related upstream issue: https://github.com/util-linux/util-linux/issues/2448
+
+--- a/libmount/src/hook_mount.c
++++ b/libmount/src/hook_mount.c
+@@ -295,5 +295,6 @@
+ 		close_sysapi_fds(api);
+ 
+-#if defined(HAVE_STRUCT_STATX) && defined(HAVE_STRUCT_STATX_STX_MNT_ID)
++#if defined(HAVE_STRUCT_STATX) && defined(HAVE_STRUCT_STATX_STX_MNT_ID) && \
++	defined(STATX_MNT_ID)
+ 	if (!rc && cxt->fs) {
+ 		struct statx st;
