@@ -1538,11 +1538,15 @@ class QtConan(ConanFile):
 
             if self.settings.os == "Windows":
                 # Qt 6.8.4+: QtMultimedia requires avrt.lib
-                if not self.options.shared and Version(self.version) >= "6.8.4":
-                    self.cpp_info.components["qtMultimedia"].system_libs.append("avrt")
+                if not self.options.shared:
+                    self.cpp_info.components["qtMultimedia"].system_libs.extend([
+                        "avrt",
+                        "propsys",
+                        "uuid",
+                    ])
 
-                _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Multimedia"
-                                                                                           # , "WMF::WMF"
+                _create_plugin("QWindowsMediaPlugin", "windowsmediaplugin", "multimedia", ["Multimedia",
+                                                                                           "Concurrent"
                                                                                            ])
                 self.cpp_info.components["qtQWindowsMediaPlugin"].system_libs += [
                     "uuid",
