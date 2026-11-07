@@ -85,8 +85,8 @@ class ElfutilsConan(ConanFile):
         self.build_requires("m4/1.4.19")
         self.build_requires("flex/2.6.4")
         self.tool_requires("bison/3.8.2")
-        if not self.conf.get("tools.gnu:pkg_config", default=False, check_type=str):
-            self.tool_requires("pkgconf/[>=2.2 <3]")
+        # autoreconf also needs pkg.m4 when a custom pkg-config executable is configured.
+        self.tool_requires("pkgconf/[>=2.2 <3]")
         if self._settings_build.os == "Windows":
             self.win_bash = True
             if not self.conf.get("tools.microsoft.bash:path", check_type=str):
@@ -135,7 +135,11 @@ class ElfutilsConan(ConanFile):
         if self.settings.os == "Linux":
             libdirs_host = [l for dependency in self.dependencies.host.values() for l in dependency.cpp_info.aggregated_components().libdirs]
             tc.extra_ldflags.extend([f"-Wl,-rpath-link,{libdir}" for libdir in libdirs_host])
-        tc.generate()
+        tc_env = tc.environment()
+        pkg_config = self.conf.get("tools.gnu:pkg_config", check_type=str)
+        if pkg_config:
+            tc_env.define("PKG_CONFIG", pkg_config)
+        tc.generate(tc_env)
         deps = AutotoolsDeps(self)
         deps.generate()
         deps = PkgConfigDeps(self)
