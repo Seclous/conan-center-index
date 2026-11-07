@@ -59,6 +59,11 @@ patches:
     - "patch_file": "patches/6.12.0-entrypoint-sync-headers.patch"
       "base_path": "qtbase"
   "6.8.5":
+    - patch_file: "patches/0001-prefer-arm-yield-builtin.patch"
+      base_path: "qtbase"
+      patch_description: "Prefer the directly callable ARM yield builtin over the ACLE intrinsic"
+      patch_type: "backport"
+      patch_source: "https://github.com/qt/qtbase/commit/a76004f16fdc43e1b7af83bfdf3f1a613491b234"
     - "patch_file": "patches/c72097e_6.8.x.diff"
       "base_path": "qtwebengine"
     - "patch_file": "patches/6.8.x-fix-macos-26.4.diff"

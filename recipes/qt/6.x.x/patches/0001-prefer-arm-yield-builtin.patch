@@ -1,0 +1,28 @@
+From a76004f16fdc43e1b7af83bfdf3f1a613491b234 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] qyieldcpu: Prefer the directly callable ARM yield builtin
+
+Backport the intrinsic selection change from Qt upstream. Clang can report
+__has_builtin(__yield) while still requiring its declaration in arm_acle.h.
+__builtin_arm_yield is directly callable and does not require that header.
+
+--- a/src/corelib/thread/qyieldcpu.h
++++ b/src/corelib/thread/qyieldcpu.h
+@@ -33,6 +33,8 @@ void qYieldCpu(void)
+ #endif
+ {
+-#if __has_builtin(__yield)
++#if __has_builtin(__builtin_arm_yield)
++    __builtin_arm_yield();
++#elif __has_builtin(__yield)
+     __yield();              // Generic
+ #elif defined(_YIELD_PROCESSOR) && defined(Q_CC_MSVC)
+     _YIELD_PROCESSOR();     // Generic; MSVC's <atomic>
+@@ -47,8 +49,6 @@ void qYieldCpu(void)
+ #elif defined(Q_PROCESSOR_X86)
+     __asm__("pause");           // hopefully asm() works in this compiler
+ 
+-#elif __has_builtin(__builtin_arm_yield)
+-    __builtin_arm_yield();
+ #elif defined(Q_PROCESSOR_ARM) && Q_PROCESSOR_ARM >= 7 && defined(Q_CC_GNU)
+     __asm__("yield");           // this works everywhere
+ 

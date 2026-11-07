@@ -442,6 +442,8 @@ class QtConan(ConanFile):
             self.requires("gst-plugins-base/1.19.2")
         if self.options.get_safe("with_ffmpeg", False):
             self.requires("ffmpeg/[>=7.1.1 <10]")
+        if self.options.get_safe("qtimageformats", False):
+            self.requires("libwebp/[>=1.3.2 <2]")
         if self.options.get_safe("with_pulseaudio", False):
             self.requires("pulseaudio/14.2")
         if self.options.with_dbus:
@@ -507,6 +509,11 @@ class QtConan(ConanFile):
         for component in ("avcodec", "avformat", "avutil", "swresample", "swscale"):
             tc.set_property(f"ffmpeg::{component}", "cmake_target_name", f"FFmpeg::{component}")
 
+        # Qt's PulseAudio finder expects legacy variables that CMakeDeps does not emit.
+        # Supply its wrapper target directly, retaining Conan's transitive dependencies.
+        tc.set_property("pulseaudio", "cmake_file_name", "WrapPulseAudio")
+        tc.set_property("pulseaudio::pulse", "cmake_target_name", "WrapPulseAudio::WrapPulseAudio")
+
         tc.generate()
 
         for f in glob.glob("*.cmake"):
@@ -545,6 +552,8 @@ class QtConan(ConanFile):
         tc.variables["BUILD_qtrepotools"] = "OFF"
 
         tc.variables["FEATURE_system_zlib"] = "ON"
+        if self.options.get_safe("qtimageformats", False):
+            tc.variables["FEATURE_system_webp"] = "ON"
 
         tc.variables["INPUT_opengl"] = self.options.get_safe("opengl", "no")
 
@@ -595,6 +604,7 @@ class QtConan(ConanFile):
                               ("with_gssapi", "gssapi"),
                               ("with_egl", "egl"),
                               ("with_gstreamer", "gstreamer"),
+                              ("with_pulseaudio", "pulseaudio"),
                               ("with_ffmpeg", "ffmpeg")]:
             tc.variables[f"FEATURE_{conf_arg}"] = ("ON" if self.options.get_safe(opt, False) else "OFF")
 
@@ -781,8 +791,7 @@ class QtConan(ConanFile):
             if self.settings.compiler == "clang":
                 if self.settings.arch == "x86":
                     return "linux-clang-libc++-32" if self.settings.compiler.libcxx == "libc++" else "linux-clang-32"
-                if self.settings.arch == "x86_64":
-                    return "linux-clang-libc++" if self.settings.compiler.libcxx == "libc++" else "linux-clang"
+                return "linux-clang-libc++" if self.settings.compiler.libcxx == "libc++" else "linux-clang"
 
         elif self.settings.os == "Macos":
             return {"clang": "macx-clang",
@@ -1551,7 +1560,8 @@ class QtConan(ConanFile):
             _create_plugin("QTgaPlugin", "qtga", "imageformats", ["Gui"])
             _create_plugin("QTiffPlugin", "qtiff", "imageformats", ["Gui"])
             _create_plugin("QWbmpPlugin", "qwbmp", "imageformats", ["Gui"])
-            _create_plugin("QWebpPlugin", "qwebp", "imageformats", ["Gui"])
+            _create_plugin("QWebpPlugin", "qwebp", "imageformats",
+                           ["Gui", "libwebp::webp", "libwebp::webpdemux", "libwebp::webpmux"])
         if self.options.get_safe("qtnetworkauth"):
             _create_module("NetworkAuth", ["Network"])
         if self.options.get_safe("qtcoap"):
