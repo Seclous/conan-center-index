@@ -1,7 +1,6 @@
 import configparser
 import glob
 import os
-import re
 import platform
 import textwrap
 
@@ -15,12 +14,6 @@ from conan.tools.gnu import PkgConfigDeps
 from conan.tools.microsoft import msvc_runtime_flag, is_msvc
 from conan.tools.scm import Version
 from conan.errors import ConanException, ConanInvalidConfiguration
-from pathlib import Path
-
-# NOTE:
-# Sections marked with     # FFMPEG_FIX ######################
-# Are workarounds to fix problems with integrating ffmpeg, that cause limitations (e.g. no webp, no pulseaudio)
-# Attempt proper fixes at some point
 
 
 required_conan_version = ">=2.0"
@@ -263,6 +256,11 @@ class QtConan(ConanFile):
             del self.options.with_ffmpeg
             del self.options.with_pulseaudio
 
+        if self.settings.os == "Android" and self.options.get_safe("with_ffmpeg"):
+            # Qt passes the Java VM to FFmpeg and uses MediaCodec for video decoding.
+            self.options["ffmpeg"].with_jni = True
+            self.options["ffmpeg"].with_mediacodec = True
+
         if self.settings.os in ("FreeBSD", "Linux"):
             if self.options.get_safe("qtwebengine"):
                 self.options.with_fontconfig = True
@@ -349,6 +347,18 @@ class QtConan(ConanFile):
 
         if self.options.with_sqlite3 and not self.dependencies["sqlite3"].options.enable_column_metadata:
             raise ConanInvalidConfiguration("sqlite3 option enable_column_metadata must be enabled for qt")
+
+        if self.options.get_safe("with_ffmpeg", False):
+            ffmpeg_options = self.dependencies["ffmpeg"].options
+            missing = [lib for lib in ("avcodec", "avformat", "swresample", "swscale")
+                       if not ffmpeg_options.get_safe(lib)]
+            if missing:
+                raise ConanInvalidConfiguration(
+                    f"qtmultimedia's FFmpeg backend needs these ffmpeg options enabled: {', '.join(missing)}")
+            if self.settings.os == "Android" and not ffmpeg_options.get_safe("with_jni"):
+                raise ConanInvalidConfiguration("qtmultimedia's FFmpeg backend on Android needs ffmpeg/*:with_jni=True")
+            if self.settings.os == "Linux" and not self.options.get_safe("with_pulseaudio", False):
+                raise ConanInvalidConfiguration("qtmultimedia's FFmpeg backend on Linux needs qt/*:with_pulseaudio=True")
 
         if self.options.get_safe("qtspeech") and not self.options.qtdeclarative:
             raise ConanInvalidConfiguration("qtspeech requires qtdeclarative, cf QTBUG-108381")
@@ -491,9 +501,11 @@ class QtConan(ConanFile):
         tc.set_property("gstreamer", "cmake_file_name", "gstreamer_conan")
         tc.set_property("gstreamer", "cmake_find_mode", "module")
 
-        # don't override https://github.com/qt/qtmultimedia/blob/dev/cmake/FindFFmpeg.cmake
-        tc.set_property("ffmpeg", "cmake_file_name", "ffmpeg_conan")
-        tc.set_property("ffmpeg", "cmake_find_mode", "module")
+        # Use Conan's complete dependency graph instead of Qt's FindFFmpeg.cmake.
+        # The FFmpeg package does not retain the .pc files used by Qt's finder.
+        tc.set_property("ffmpeg", "cmake_file_name", "FFmpeg")
+        for component in ("avcodec", "avformat", "avutil", "swresample", "swscale"):
+            tc.set_property(f"ffmpeg::{component}", "cmake_target_name", f"FFmpeg::{component}")
 
         tc.generate()
 
@@ -691,14 +703,8 @@ class QtConan(ConanFile):
         with_egl = self.options.get_safe("with_egl", False)
         tc.variables["CMAKE_DISABLE_FIND_PACKAGE_EGL"] = not with_egl
 
-        # FFMPEG_FIX ######################
-        # hard-disable the WebP plugin regardless of what packages are present, it clashes with ffmpeg's webp use.
-        tc.cache_variables["FEATURE_webp"] = "OFF"
-        tc.cache_variables["QT_FEATURE_webp"] = "OFF"
-        
-        # hack: set required vaapi version hardcoded to 2, because auto-detection doesn't (always?) work properly.
+        # Existing VAAPI SONAME workaround; independent of FFmpeg target discovery.
         tc.cache_variables["VAAPI_SUFFIX"] = "2"
-        ###################################
 
         tc.generate()
 
@@ -867,21 +873,6 @@ class QtConan(ConanFile):
             save(self, ".qmake.stash", "")
             save(self, ".qmake.super", "")
         cmake = CMake(self)
-
-        # FFMPEG_FIX ######################
-        # Patch out the pulseaudio requirement on linux - note, that this will leave ffmpeg unable to deal with audio.
-        # Attempts to get pulseaudio to build failed so far.
-        qtbi = os.path.join(self.source_folder, "qtmultimedia", "src", "multimedia", "configure.cmake")
-
-        try:
-            replace_in_file(
-                self, qtbi,
-                'FFmpeg_FOUND AND (APPLE OR WIN32 OR ANDROID OR QNX OR QT_FEATURE_pulseaudio)',
-                'FFmpeg_FOUND'
-            )
-        except:
-            pass
-        # #################################
 
         cmake.configure()
         cmake.build()
@@ -1589,16 +1580,27 @@ class QtConan(ConanFile):
                     "gstreamer::gstreamer",
                     "gst-plugins-base::gst-plugins-base"])
             if self.options.with_ffmpeg:
-                # https://github.com/qt/qtmultimedia/blob/dev/src/plugins/multimedia/ffmpeg/CMakeLists.txt
-                # TODO: ffmpeg plugin private also links to bunch of system libs
-                _create_plugin("QFFmpegMediaPlugin", "ffmpegmediaplugin", "multimedia", [
-                    "Multimedia",
-                    "ffmpeg::avcodec",
-                    "ffmpeg::avformat",
-                    "ffmpeg::avutil",
-                    "ffmpeg::swresample",
-                    "ffmpeg::swscale"
-                ])
+                # https://github.com/qt/qtmultimedia/blob/v6.11.0/src/plugins/multimedia/ffmpeg/CMakeLists.txt
+                ffmpeg_reqs = ["ffmpeg::avformat", "ffmpeg::avcodec", "ffmpeg::swresample",
+                               "ffmpeg::swscale", "ffmpeg::avutil"]
+                if self.options.shared:
+                    _create_plugin("QFFmpegMediaPlugin", "ffmpegmediaplugin", "multimedia", ["Multimedia"] + ffmpeg_reqs)
+                else:
+                    # The static plugin needs the separately installed Qt6FFmpegMediaPluginImpl archive.
+                    _create_module("FFmpegMediaPluginImplPrivate", ["Multimedia", "Network", "Gui"] + ffmpeg_reqs,
+                                   has_include_dir=False)
+                    _create_plugin("QFFmpegMediaPlugin", "ffmpegmediaplugin", "multimedia", ["FFmpegMediaPluginImplPrivate"])
+                    backend = self.cpp_info.components["qtFFmpegMediaPluginImplPrivate"]
+                    if self.settings.os == "Windows":
+                        backend.system_libs.extend(["mf", "mfplat", "mfreadwrite", "mfuuid"])
+                        if is_msvc(self):
+                            backend.system_libs.extend(["dwmapi", "dxva2", "windowsapp"])
+                    elif is_apple_os(self):
+                        backend.frameworks.extend(["AudioToolbox", "AVFoundation", "CoreMedia", "CoreVideo", "Security"])
+                        if self.settings.os == "Macos":
+                            backend.frameworks.append("AppKit")
+                    elif self.settings.os == "Android":
+                        backend.system_libs.extend(["OpenSLES", "mediandk", "android"])
 
             if self.settings.os == "Windows":
                 # Qt 6.8.4+: QtMultimedia requires avrt.lib
@@ -1965,102 +1967,3 @@ class QtConan(ConanFile):
         self.cpp_info.set_property("cmake_build_modules", build_modules_list)
 
         self.conf_info.define("user.qt:tools_directory", os.path.join(self.package_folder, "bin" if self.settings.os == "Windows" else "libexec"))
-
-        # FFMPEG_FIX ######################
-        self.prune_missing_libs()
-
-        self.link_ffmpeg_backend()
-
-
-
-    # Remove components, that are missing libs. This appears to happen, when webp is disabled.
-    # Expect the following output: [qt] Pruning missing libs from 'qtQWebpPlugin': qwebp
-    def prune_missing_libs(self):
-        pkgroot = Path(self.package_folder)
-        present = set()
-
-        def file_variants(fname: str):
-            s = fname.lower()
-            s = re.sub(r'\.(libd|lib|a|so(\.\d+)*)$', '', s)  # strip shared/static suffix + version
-            # account for the quirky Linux lib prefixing.
-            if s.startswith("lib"):
-                s = s[3:]  # strip Unix "lib" prefix
-            # tolerate debug-suffix (Windows debug naming)
-            return {s, s[:-1]} if s.endswith("d") else {s, s + "d"}
-
-        for pat in ("*.lib", "*.a", "*.so", "*.so.*", "*.dylib"):
-            for p in pkgroot.rglob(pat):
-                present |= file_variants(p.name)
-
-        for comp_name, comp in self.cpp_info.components.items():
-            libs = getattr(comp, "libs", None)
-            if not libs:
-                continue
-                
-
-            keep, missing = [], []
-            for l in libs:
-                ll = l.lower()
-                exists = ll in present
-                if not exists and ll.endswith("d"):
-                    exists = ll[:-1] in present  # match base <-> debug
-                (keep if exists else missing).append(l)
-
-            if missing:
-                self.output.warning(
-                    f"[qt] Pruning missing libs from '{comp_name}': {', '.join(missing)}"
-                )
-
-            comp.libs = keep
-
-
-    def link_ffmpeg_backend(self):
-        # Ensure the FFmpeg plugin (libffmpegmediaplugin) links to its backend
-        # Qt6FFmpegMediaPluginImpl
-
-        components = self.cpp_info.components
-        plugin = "qtQFFmpegMediaPlugin"
-        backend = "qtFFmpegBackendPrivate"
-
-        # plugin present?
-        if plugin not in components:
-            self.output.info(f"[qt-wire] Plugin component not present: {plugin}")
-            return
-
-        # find backend archive in <package>/lib
-        libdir = Path(self.package_folder) / "lib"
-        names = ("Qt6FFmpegMediaPluginImpl", "Qt6MultimediaFFmpeg") # 2nd may not be required
-        found = None
-        for n in names:
-            if (libdir / f"lib{n}.a").exists() or (libdir / f"{n}.lib").exists():
-                found = n
-                break
-
-        if not found:
-            self.output.warning("[qt-wire] FFmpeg backend archive not found in lib/ "
-                                "(expected *FFmpegMediaPluginImpl* or *MultimediaFFmpeg*).")
-            return
-
-        # export private backend component
-        bc = components[backend]
-        if not getattr(bc, "libs", None):
-            bc.libs = [found]
-            bc.libdirs = [str(libdir)]
-            if "qtMultimedia" in components:
-                bc.requires = ["qtMultimedia"]
-
-            self.output.info(f"[qt-wire] Created {backend}: libs={bc.libs}, libdirs={bc.libdirs}, "
-                             f"requires={bc.requires or []}")
-
-        # Some additional pain (Linux): keep correct link order: backend depends on QtMultimedia if present
-        pc = components[plugin]
-        old_reqs = list(pc.requires or [])
-        pc.requires = [backend] + [r for r in old_reqs if r != backend]
-
-        # make backend inherit the plugin's previous requirements
-        bc.requires = list(dict.fromkeys((bc.requires or []) + old_reqs))
-
-        self.output.info(f"[qt-wire] {plugin}.requires: {old_reqs} -> {pc.requires}")
-        self.output.info(f"[qt-wire] {backend}.requires: {bc.requires}")
-
-    # END FFMPEG_FIX ##################
