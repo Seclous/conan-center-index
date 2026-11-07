@@ -1,9 +1,11 @@
+import json
 import os
+import re
 
 from conan import ConanFile
 from conan.errors import ConanInvalidConfiguration
 from conan.tools.env import VirtualBuildEnv
-from conan.tools.files import export_conandata_patches, apply_conandata_patches, copy, get, rm, rmdir, replace_in_file
+from conan.tools.files import export_conandata_patches, apply_conandata_patches, copy, get, load, rm, rmdir, replace_in_file, save
 from conan.tools.gnu import Autotools, AutotoolsToolchain, AutotoolsDeps, PkgConfigDeps
 from conan.tools.layout import basic_layout
 from conan.tools.microsoft import is_msvc
@@ -157,6 +159,15 @@ class ElfutilsConan(ConanFile):
         copy(self, pattern="COPYING*", src=self.source_folder, dst=os.path.join(self.package_folder, "licenses"))
         autotools = Autotools(self)
         autotools.install()
+        # Configure searches libc first, then standalone GNU compatibility libraries.
+        # Preserve its result for consumers of the static libdw archive.
+        makefile = load(self, os.path.join(self.build_folder, "src", "Makefile"))
+        system_libs = []
+        for variable in ("argp_LDADD", "fts_LIBS", "obstack_LIBS"):
+            value = re.search(rf"^{variable} = (.*)$", makefile, re.MULTILINE)
+            if value:
+                system_libs.extend(flag[2:] for flag in value.group(1).split() if flag.startswith("-l"))
+        save(self, os.path.join(self.package_folder, "res", "libdw-system-libs.json"), json.dumps(system_libs))
         rmdir(self, os.path.join(self.package_folder, "etc"))
         rmdir(self, os.path.join(self.package_folder, "share"))
         rmdir(self, os.path.join(self.package_folder, "lib", "pkgconfig"))
@@ -183,6 +194,9 @@ class ElfutilsConan(ConanFile):
         self.cpp_info.components["libdw"].libs = ["dw"]
         self.cpp_info.components["libdw"].requires = ["libelf"]
         self.cpp_info.components["libdw"].set_property("pkg_config_name", "libdw")
+        if not self.options.shared:
+            system_libs = json.loads(load(self, os.path.join(self.package_folder, "res", "libdw-system-libs.json")))
+            self.cpp_info.components["libdw"].system_libs.extend(system_libs)
         if self.settings.os in ["Linux", "FreeBSD"]:
             self.cpp_info.components["libdw"].system_libs.extend(["dl"])
 

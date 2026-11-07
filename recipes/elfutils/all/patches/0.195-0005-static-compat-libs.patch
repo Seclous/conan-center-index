@@ -1,0 +1,12 @@
+diff --git a/src/Makefile.am b/src/Makefile.am
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -67,7 +67,7 @@
+ 
+ if BUILD_STATIC
+ libasm = ../libasm/libasm.a
+-libdw = ../libdw/libdw.a -lz $(zip_LIBS) $(libelf) -ldl -lpthread
++libdw = ../libdw/libdw.a -lz $(zip_LIBS) $(libelf) -ldl -lpthread $(argp_LDADD) $(fts_LIBS) $(obstack_LIBS)
+ libelf = ../libelf/libelf.a -lz $(zstd_LIBS)
+ if LIBDEBUGINFOD
+ libdebuginfod = ../debuginfod/libdebuginfod.a -lpthread $(libcurl_LIBS) $(crypto_LIBS) $(jsonc_LIBS)

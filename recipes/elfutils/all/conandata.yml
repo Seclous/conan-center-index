@@ -9,5 +9,12 @@ patches:
   "0.195":
     - patch_file: "patches/0.195-0002-add-enable-static-option-to-configure.patch"
     - patch_file: "patches/0.195-0003-fix-libelf-libadd-crc32-conflict.patch"
+    - patch_file: "patches/0.195-0004-musl-macros.patch"
+      patch_type: "portability"
+      patch_description: "Provide missing GNU macros, retaining ordinary glob matching on musl"
+      patch_source: "https://github.com/alpinelinux/aports/blob/3.21-stable/main/elfutils/musl-macros.patch"
+    - patch_file: "patches/0.195-0005-static-compat-libs.patch"
+      patch_type: "portability"
+      patch_description: "Link static tools with the GNU compatibility libraries detected by configure"
   "0.190":
     - patch_file: "patches/0.189-0002-add-enable-static-option-to-configure.patch"
