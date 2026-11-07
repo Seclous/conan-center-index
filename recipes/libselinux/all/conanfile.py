@@ -35,10 +35,12 @@ class LibSELinuxConan(ConanFile):
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
+        "with_fts": [True, False],
     }
     default_options = {
         "shared": False,
         "fPIC": True,
+        "with_fts": False,
     }
 
     def export_sources(self):
@@ -88,6 +90,11 @@ class LibSELinuxConan(ConanFile):
         sepol_lib_folder = os.path.join(self._sepol_source_folder, "src")
         tc.extra_ldflags.append(f"-L{sepol_lib_folder}")
         tc.make_args.append("USE_PCRE2=y")
+        if self.options.with_fts:
+            # musl provides fts through the separate platform library.
+            tc.make_args.append("FTS_LDLIBS=-lfts")
+            # musl no longer exposes the stat64/lstat64 aliases via _GNU_SOURCE.
+            tc.extra_cflags.append("-D_LARGEFILE64_SOURCE")
         env = tc.environment()
         if cross_building(self):
             env.append_path("PKG_CONFIG_LIBDIR", self.generators_folder)
@@ -134,6 +141,8 @@ class LibSELinuxConan(ConanFile):
         self.cpp_info.components["selinux"].requires = ["sepol", "pcre2::pcre2"]
         if self.options.shared:
             self.cpp_info.components["selinux"].system_libs = ["dl"]
+        if self.options.with_fts:
+            self.cpp_info.components["selinux"].system_libs.append("fts")
 
         self.cpp_info.components["sepol"].set_property("pkg_config_name", "libsepol")
         self.cpp_info.components["sepol"].libs = ["sepol"]
