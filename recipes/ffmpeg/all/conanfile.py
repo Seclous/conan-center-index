@@ -694,9 +694,12 @@ class FFMpegConan(ConanFile):
         cxx = compilers_from_conf.get("cpp", buildenv_vars.get("CXX", self._default_compilers.get("cxx")))
         if cxx:
             args.append(f"--cxx={unix_path(self, cxx)}")
-        ld = buildenv_vars.get("LD")
-        if ld:
-            args.append(f"--ld={unix_path(self, ld)}")
+        # On Linux with GCC or Clang, configure links through the C compiler
+        # driver. LD can point to a raw linker that cannot accept driver flags.
+        if self.settings.os != "Linux" or self.settings.compiler not in ("gcc", "clang"):
+            ld = buildenv_vars.get("LD")
+            if ld:
+                args.append(f"--ld={unix_path(self, ld)}")
         ranlib = buildenv_vars.get("RANLIB")
         if ranlib:
             args.append(f"--ranlib={unix_path(self, ranlib)}")
