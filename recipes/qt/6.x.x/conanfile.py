@@ -718,9 +718,6 @@ class QtConan(ConanFile):
         with_egl = self.options.get_safe("with_egl", False)
         tc.variables["CMAKE_DISABLE_FIND_PACKAGE_EGL"] = not with_egl
 
-        # Existing VAAPI SONAME workaround; independent of FFmpeg target discovery.
-        tc.cache_variables["VAAPI_SUFFIX"] = "2"
-
         tc.generate()
 
         if self.settings_build.os == "Windows" and not cross_building(self):
