@@ -355,8 +355,13 @@ class QtConan(ConanFile):
             if missing:
                 raise ConanInvalidConfiguration(
                     f"qtmultimedia's FFmpeg backend needs these ffmpeg options enabled: {', '.join(missing)}")
-            if self.settings.os == "Android" and not ffmpeg_options.get_safe("with_jni"):
-                raise ConanInvalidConfiguration("qtmultimedia's FFmpeg backend on Android needs ffmpeg/*:with_jni=True")
+            if self.settings.os == "Android":
+                missing = [opt for opt in ("with_jni", "with_mediacodec") if not ffmpeg_options.get_safe(opt)]
+                if missing:
+                    raise ConanInvalidConfiguration(
+                        f"qtmultimedia's FFmpeg backend on Android needs these ffmpeg options enabled: {', '.join(missing)}")
+            if self.settings.os == "FreeBSD":
+                raise ConanInvalidConfiguration("qtmultimedia's FFmpeg backend on FreeBSD requires PulseAudio, which this recipe's dependency only supports on Linux")
             if self.settings.os == "Linux" and not self.options.get_safe("with_pulseaudio", False):
                 raise ConanInvalidConfiguration("qtmultimedia's FFmpeg backend on Linux needs qt/*:with_pulseaudio=True")
 
