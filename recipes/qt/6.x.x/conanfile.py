@@ -1520,8 +1520,14 @@ class QtConan(ConanFile):
                 _create_module("SvgWidgets", ["Gui", "Svg", "Widgets"])
 
         if self.options.qtwayland and self.options.gui:
-            _create_module("WaylandClient", ["Gui", "wayland::wayland-client"])
-            _create_module("WaylandCompositor", ["Gui", "wayland::wayland-server"])
+            _create_module("WaylandClient", ["Gui", "wayland::wayland-client", "wayland::wayland-cursor"])
+            compositor_reqs = ["Gui", "wayland::wayland-server"]
+            if self.options.get_safe("opengl", "no") != "no":
+                compositor_reqs.append("OpenGL")
+            _create_module("WaylandCompositor", compositor_reqs)
+            # Qt 6.10 moved the Wayland platform plugin to qtbase and renamed its library.
+            wayland_plugin = "qwayland" if Version(self.version) >= "6.10" else "qwayland-generic"
+            _create_plugin("QWaylandIntegrationPlugin", wayland_plugin, "platforms", ["WaylandClient"])
 
         if self.options.get_safe("qtactiveqt") and self.settings.os == "Windows":
             _create_module("AxBase", ["Gui", "Widgets"])
