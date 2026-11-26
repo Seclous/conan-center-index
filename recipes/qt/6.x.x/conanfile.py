@@ -478,13 +478,25 @@ class QtConan(ConanFile):
         if self.options.qtwayland:
             self.tool_requires("wayland/1.22.0")
         if cross_building(self):
-            tool_options = {}
             if self._apple_embedded:
                 # Tools are not built for the target (see QT_FORCE_BUILD_TOOLS), the build context Qt must provide them
                 tool_modules = ["qttools", "qtshadertools", "qtdeclarative", "qtremoteobjects", "qtscxml",
                                 "qtquick3d", "qtlottie", "qtopcua", "qtcanvaspainter"]
                 tool_options = {m: True for m in tool_modules if self.options.get_safe(m)}
-            self.tool_requires(f"qt/{self.version}", options=tool_options)
+            else:
+                # Keep GUI and Widgets available for uic in the build context.
+                tool_options = dict.fromkeys((
+                    "openssl", "with_brotli", "with_freetype", "with_harfbuzz",
+                    "with_libpng", "with_md4c", "with_odbc", "with_pq", "with_sqlite3",
+                ), False)
+                tool_options["with_dbus"] = bool(self.options.with_dbus)
+                tool_options["opengl"] = "no"
+                if self.settings_build.os in ("Linux", "FreeBSD"):
+                    tool_options.update(with_fontconfig=False, with_icu=False, with_x11=False)
+                if self.options.qtwayland:
+                    # Qt Wayland builds qtwaylandscanner for the build machine.
+                    tool_options.update(qtwayland=True, with_egl=True, opengl="desktop")
+            self.tool_requires(str(self.ref), options=tool_options)
 
     def generate(self):
         ms = VirtualBuildEnv(self)
@@ -962,6 +974,8 @@ class QtConan(ConanFile):
             targets.append("qvkgen")
         if self.options.widgets:
             targets.append("uic")
+        if self.options.qtwayland:
+            targets.append("qtwaylandscanner")
         if self.settings_build.os == "Macos" and self.settings.os != "iOS":
             targets.extend(["macdeployqt"])
         if self.settings.os == "Windows":
